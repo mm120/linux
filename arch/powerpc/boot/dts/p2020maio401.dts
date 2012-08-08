@@ -1,0 +1,265 @@
+/*
+ * P2020 MAIO 400 Device Tree Source
+ *
+ * Copyright 2012 OMICRON electronics
+ *
+ * This program is free software; you can redistribute  it and/or modify it
+ * under  the terms of  the GNU General  Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
+ */
+
+/include/ "p2020si.dtsi"
+
+/ {
+	model = "omicron,P2020MAIO400";
+	compatible = "omicron,maio400";
+
+	aliases {
+		ethernet0 = &enet0;
+		ethernet1 = &enet1;
+		ethernet2 = &enet2;
+		serial0 = &serial0;
+		serial1 = &serial1;
+		pci0 = &pci0;
+		pci1 = &pci1;
+		pci2 = &pci2;
+	};
+
+	memory {
+		device_type = "memory";
+	};
+
+	soc@ffe00000 {
+
+		i2c@3000 {
+			dtt@4c {
+				compatible = "national,lm90";
+				reg = <0x4c>;
+			};
+                        ics9fg104@6e {
+                                compatible = "maio-ck-req-mpcie";
+                                reg = <0x6e>;
+                                interrupt-parent = <&mpic>;
+                                interrupts = <4 1>;
+                        };
+		};
+
+		i2c@3100 {
+			dtt@4c {
+				compatible = "national,lm90";
+				reg = <0x4c>;
+			};
+			rtc@68 {
+				compatible = "dallas,ds1339";
+				reg = <0x68>;
+			};
+		};
+
+		spi@7000 {
+			flash@0 {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "eon,en25q128";
+				reg = <0>;
+				spi-max-frequency = <25000000>;
+
+				partition@0 {
+					/* 1MB, U-boot */
+					reg = <0x0 0x0100000>;
+					label = "SPI Flash (U-boot)";
+				};
+				partition@0100000 {
+					/* 128 KB, U-boot environment */
+					reg = <0x0100000 0x20000>;
+					label = "SPI Flash (U-boot env)";
+				};
+				partition@0120000 {
+					/* 128 KB, dtb */
+					reg = <0x0120000 0x20000>;
+					label = "SPI Flash (dtb)";
+				};
+				partition@0140000 {
+					/* 768 KB, unused */
+					reg = <0x0140000 0xC0000>;
+					label = "SPI Flash (empty)";
+				};
+				partition@0200000 {
+					/* 14 MB, Linux kernel (+ cpio file system) */
+					reg = <0x0200000 0xE00000>;
+					label = "SPI Flash (Linux kernel)";
+				};
+			};
+
+			fpga@1 {
+				#address-cells = <1>;
+				#size-cells = <1>;
+				compatible = "spidev";
+				reg = <1>;
+				spi-max-frequency = <125000000>;
+				linux,modalias = "sdidev";
+			};
+		};
+
+		usb@22000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "fsl,p2020-usb2-dr", "fsl-usb2-dr";
+			reg = <0x22000 0x1000>;
+			interrupt-parent = <&mpic>;
+			interrupts = <28 0x2>;
+			dr_mode = "peripheral";
+			phy_type = "ulpi";
+		};
+
+		mdio@24520 {
+			phy0: ethernet-phy@0 {
+				reg = <0x0>;
+				};
+			phy1: ethernet-phy@18 {
+				reg = <0x18>;
+				};
+			phy2: ethernet-phy@19 {
+				reg = <0x19>;
+				};
+		};
+
+		mdio@25520 {
+			status = "disabled";
+		};
+
+		mdio@26520 {
+			status = "disabled";
+		};
+
+		ptp_clock@24E00 {
+			compatible = "fsl,etsec-ptp";
+			reg = <0x24E00 0xB0>;
+			interrupts = <68 2 69 2 70 2>;
+			interrupt-parent = < &mpic >;
+			/* Some of these values get overwritten by the
+			 * boot-loader! */
+			fsl,tclk-cksel = <1>;
+			fsl,tclk-bypass = <0>;
+			fsl,tclk-period = <5>;
+			fsl,tmr-prsc = <200>;
+			fsl,tmr-add = <0xCCCCCCCD>;
+			fsl,tmr-fiper1 = <0x0001869B>;
+			fsl,tmr-fiper2 = <0x3B9AC9FB>;
+			fsl,max-adj = <249999999>;
+		};
+
+		enet0: ethernet@24000 {
+			phy-handle = <&phy0>;
+			phy-connection-type = "rgmii-id";
+		};
+
+		enet1: ethernet@25000 {
+			phy-handle = <&phy1>;
+			phy-connection-type = "rgmii-id";
+		};
+
+		enet2: ethernet@26000 {
+			phy-handle = <&phy2>;
+			phy-connection-type = "rgmii-id";
+		};
+
+		leds {
+			compatible = "gpio-leds";
+			led_yellow {
+				/* D16, The yellow LED on the edge of the board. */
+				gpios = <&gpio 2 1>;
+				default-state = "keep";
+			};
+			led_green {
+				/* D17, The green LED on the edge of the board. */
+				gpios = <&gpio 3 1>;
+				default-state = "keep";
+			};
+		};
+
+                maio-pwr-fail {
+                        compatible = "maio-pwr-fail";
+                        interrupt-parent = <&mpic>;
+                        interrupts = <0 1>;
+                };
+	};
+
+	pci0: pcie@ffe08000 {
+		ranges = <0x2000000 0x0 0x80000000 0 0x80000000 0x0 0x10000000
+			  0x1000000 0x0 0x00000000 0 0xffc00000 0x0 0x10000>;
+		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0x0 0x0 0x1 &mpic 0x8 0x1
+			0000 0x0 0x0 0x2 &mpic 0x9 0x1
+			0000 0x0 0x0 0x3 &mpic 0xa 0x1
+			0000 0x0 0x0 0x4 &mpic 0xb 0x1
+			>;
+		pcie@0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+			#size-cells = <2>;
+			#address-cells = <3>;
+			device_type = "pci";
+			ranges = <0x2000000 0x0 0x80000000
+				  0x2000000 0x0 0x80000000
+				  0x0 0x10000000
+
+				  0x1000000 0x0 0x0
+				  0x1000000 0x0 0x0
+				  0x0 0x10000>;
+		};
+	};
+
+	pci1: pcie@ffe09000 {
+		ranges = <0x2000000 0x0 0x90000000 0 0x90000000 0x0 0x08000000
+			  0x1000000 0x0 0x00000000 0 0xffc10000 0x0 0x10000>;
+		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0x0 0x0 0x1 &mpic 0x4 0x1
+			0000 0x0 0x0 0x2 &mpic 0x0 0x1
+			0000 0x0 0x0 0x3 &mpic 0x1 0x1
+			0000 0x0 0x0 0x4 &mpic 0x7 0x1
+			>;
+			pcie@0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+			#size-cells = <2>;
+			#address-cells = <3>;
+			device_type = "pci";
+			ranges = <0x2000000 0x0 0x90000000
+				  0x2000000 0x0 0x90000000
+				  0x0 0x08000000
+
+				  0x1000000 0x0 0x0
+				  0x1000000 0x0 0x0
+				  0x0 0x100000>;
+		};
+	};
+
+	pci2: pcie@ffe0a000 {
+		ranges = <0x2000000 0x0 0x98000000 0 0x98000000 0x0 0x08000000
+			  0x1000000 0x0 0x00000000 0 0xffc20000 0x0 0x10000>;
+		interrupt-map-mask = <0xf800 0x0 0x0 0x7>;
+		interrupt-map = <
+			/* IDSEL 0x0 */
+			0000 0x0 0x0 0x1 &mpic 0x5 0x1
+			0000 0x0 0x0 0x2 &mpic 0x6 0x1
+			0000 0x0 0x0 0x3 &mpic 0x2 0x1
+			0000 0x0 0x0 0x4 &mpic 0x3 0x1
+			>;
+		pcie@0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+			#size-cells = <2>;
+			#address-cells = <3>;
+			device_type = "pci";
+			ranges = <0x2000000 0x0 0x98000000
+				  0x2000000 0x0 0x98000000
+				  0x0 0x08000000
+
+				  0x1000000 0x0 0x0
+				  0x1000000 0x0 0x0
+				  0x0 0x100000>;
+		};
+	};
+};
