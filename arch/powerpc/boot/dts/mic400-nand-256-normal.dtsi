@@ -1,0 +1,20 @@
+/*
+ * MIC400 Device Tree Source
+ *
+ * Copyright 2013 OMICRON electronics GmbH.
+ *
+ * This program is free software; you can redistribute	it and/or modify it
+ * under  the terms of	the GNU General	 Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
+ */
+
+&ifc_nand {
+	partition@0000000 { reg = <0x0000000 0x1000000>; label = "NAND Persistent File System"; };
+	partition@1000000 { reg = <0x1000000 0xf000000>; label = "NAND Upgrade Section"; };
+
+	partition@olk_1000000 { reg = <0x1000000 0x2000000>; label = "NAND P1 Read-Write File System"; };
+	partition@olk_3000000 { reg = <0x3000000 0x5800000>; label = "NAND P1 Root File System"; };
+	partition@olk_8800000 { reg = <0x8800000 0x2000000>; label = "NAND P2 Read-Write File System"; };
+	partition@olk_A800000 { reg = <0xa800000 0x5800000>; label = "NAND P2 Root File System"; };
+};

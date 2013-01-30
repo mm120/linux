@@ -1,0 +1,108 @@
+/*
+ * MIC400 Device Tree Source
+ *
+ * Copyright 2013 OMICRON electronics GmbH.
+ *
+ * This program is free software; you can redistribute	it and/or modify it
+ * under  the terms of	the GNU General	 Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
+ */
+
+/include/ "mic400-base.dtsi"
+
+/include/ "mic400-nand-256-normal.dtsi"
+
+&board_soc {
+	i2c@3100 {
+		leds@20 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "ti,tlc59108";
+			reg = <0x20>;
+
+			beeper@0 {
+				label = "beeper";
+				reg = <0x0>;
+			};
+			ledgrn@2 {
+				label = "LED-GRN";
+				reg = <0x2>;
+			};
+			ledreg@3 {
+				label = "LED-RED";
+				reg = <0x3>;
+			};
+		};
+		leds@21 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "ti,tlc59108";
+			reg = <0x21>;
+
+			ledva_r@0 {
+				label = "amp:red:volt";
+				reg = <0x0>;
+			};
+			ledva_g@3 {
+				label = "amp:green:volt";
+				reg = <0x3>;
+			};
+			ledva_b@6 {
+				label = "amp:blue:volt";
+				reg = <0x6>;
+			};
+			ledca_r@1 {
+				label = "amp:red:current";
+				reg = <0x1>;
+			};
+			ledca_g@4 {
+				label = "amp:green:current";
+				reg = <0x4>;
+			};
+			ledca_b@7 {
+				label = "amp:blue:current";
+				reg = <0x7>;
+			};
+			ledauxdc_r@2 {
+				label = "aux:red:dc";
+				reg = <0x2>;
+			};
+			ledauxdc_g@5 {
+				label = "aux:green:dc";
+				reg = <0x5>;
+			};
+		};
+		poe@29 {
+			compatible = "linear,ltc4266";
+			reg = <0x29>;
+		};
+		temp@48 {
+			compatible = "dallas,ds75";
+			reg = <0x48>;
+		};
+		cfgmem@50 {
+			compatible = "24c128";
+			reg = <0x50>;
+			pagesize = <0x40>;
+		};
+		cfgmem@52 {
+			compatible = "24c128";
+			reg = <0x52>;
+			pagesize = <0x40>;
+		};
+		cfgmem@53 {
+			compatible = "24c64";
+			reg = <0x53>;
+			pagesize = <0x8000>;
+		};
+		bme280@76 {
+			compatible = "bosch,bme280";
+			reg = <0x76>;
+		};
+		bme280@77 {
+			compatible = "bosch,bme280";
+			reg = <0x77>;
+		};
+	};
+};
