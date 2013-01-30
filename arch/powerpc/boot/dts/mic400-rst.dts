@@ -1,0 +1,28 @@
+/*
+ * MIC400 Device Tree Source
+ *
+ * Copyright 2013 OMICRON electronics GmbH.
+ *
+ * This program is free software; you can redistribute	it and/or modify it
+ * under  the terms of	the GNU General	 Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
+ */
+
+/include/ "mic400-base.dtsi"
+
+/include/ "mic400-nand-256-normal.dtsi"
+
+&board_soc {
+	i2c@3100 {
+		temp@48 {
+			compatible = "dallas,ds75";
+			reg = <0x48>;
+		};
+		cfgmem@50 {
+			compatible = "24c128";
+			reg = <0x50>;
+			pagesize = <0x40>;
+		};
+	};
+};
