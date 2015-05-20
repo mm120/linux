@@ -221,6 +221,14 @@ config PPA8548
 	select DEFAULT_UIMAGE
 	select HAVE_RAPIDIO
 
+config MAIO400
+	bool "Omicron MAIO-400"
+	select PPC_I8259
+	select DEFAULT_UIMAGE
+	select SWIOTLB
+	help
+	  This option enables support for the Omicron MAIO-400 board
+
 config GE_IMP3A
 	bool "GE Intelligent Platforms IMP3A"
 	select DEFAULT_UIMAGE
