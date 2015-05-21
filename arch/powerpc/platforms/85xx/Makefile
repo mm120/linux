@@ -36,3 +36,4 @@ obj-$(CONFIG_PPC_QEMU_E500) += qemu_e500.o
 obj-$(CONFIG_SGY_CTS1000) += sgy_cts1000.o
 obj-$(CONFIG_MVME2500)	  += mvme2500.o
 obj-$(CONFIG_MAIO400)     += maio400.o
+obj-$(CONFIG_MIC400)      += mic400.o
