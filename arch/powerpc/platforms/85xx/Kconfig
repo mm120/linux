@@ -229,6 +229,12 @@ config MAIO400
 	help
 	  This option enables support for the Omicron MAIO-400 board
 
+config MIC400
+	bool "Omicron MIC-400"
+	select DEFAULT_UIMAGE
+	help
+	  This option enables support for the Omicron MIC-400 board
+
 config GE_IMP3A
 	bool "GE Intelligent Platforms IMP3A"
 	select DEFAULT_UIMAGE
