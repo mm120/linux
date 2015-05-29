@@ -511,7 +511,7 @@ static void struct_ep_qh_setup(struct fsl_udc *udc, unsigned char ep_num,
 		tmp |= EP_QUEUE_HEAD_ZLT_SEL;
 
 	p_QH->max_pkt_length = cpu_to_hc32(tmp);
-	p_QH->next_dtd_ptr = 1;
+	p_QH->next_dtd_ptr = cpu_to_hc32(EP_QUEUE_HEAD_NEXT_TERMINATE);
 	p_QH->size_ioc_int_sts = 0;
 }
 
@@ -1072,7 +1072,7 @@ static int fsl_ep_fifo_status(struct usb_ep *_ep)
 	    (1 << (ep_index(ep)));
 
 	if (fsl_readl(&dr_regs->endptstatus) & bitmask)
-		size = (qh->size_ioc_int_sts & DTD_PACKET_SIZE)
+		size = (hc32_to_cpu(qh->size_ioc_int_sts) & DTD_PACKET_SIZE)
 		    >> DTD_LENGTH_BIT_POS;
 
 	pr_debug("%s %u\n", __func__, size);
