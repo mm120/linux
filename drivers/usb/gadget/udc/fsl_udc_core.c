@@ -1557,8 +1557,7 @@ static void tripwire_handler(struct fsl_udc *udc, u8 ep_num, u8 *buffer_ptr)
 	qh = &udc->ep_qh[ep_num * 2 + EP_DIR_OUT];
 
 	/* Clear bit in ENDPTSETUPSTAT */
-	temp = fsl_readl(&dr_regs->endptsetupstat);
-	fsl_writel(temp | (1 << ep_num), &dr_regs->endptsetupstat);
+	fsl_writel((1 << ep_num), &dr_regs->endptsetupstat);
 
 	/* while a hazard exists when setup package arrives */
 	do {
