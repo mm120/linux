@@ -40,7 +40,7 @@
 #include <linux/of_device.h>
 
 #include <asm/byteorder.h>
-#include <asm/io.h>
+#include <linux/io.h>
 #include <asm/unaligned.h>
 #include <asm/dma.h>
 
@@ -60,7 +60,7 @@ static struct usb_dr_device __iomem *dr_regs;
 static struct usb_sys_interface __iomem *usb_sys_regs;
 
 /* it is initialized in probe()  */
-static struct fsl_udc *udc_controller = NULL;
+static struct fsl_udc *udc_controller;
 
 static const struct usb_endpoint_descriptor
 fsl_ep0_desc = {
@@ -68,7 +68,7 @@ fsl_ep0_desc = {
 	.bDescriptorType =	USB_DT_ENDPOINT,
 	.bEndpointAddress =	0,
 	.bmAttributes =		USB_ENDPOINT_XFER_CONTROL,
-	.wMaxPacketSize =	USB_MAX_CTRL_PAYLOAD,
+	.wMaxPacketSize =	cpu_to_le16(USB_MAX_CTRL_PAYLOAD),
 };
 
 static void fsl_ep_fifo_flush(struct usb_ep *_ep);
@@ -678,7 +678,7 @@ fsl_alloc_request(struct usb_ep *_ep, gfp_t gfp_flags)
 {
 	struct fsl_req *req = NULL;
 
-	req = kzalloc(sizeof *req, gfp_flags);
+	req = kzalloc(sizeof(*req), gfp_flags);
 	if (!req)
 		return NULL;
 
@@ -1568,7 +1568,7 @@ static void tripwire_handler(struct fsl_udc *udc, u8 ep_num, u8 *buffer_ptr)
 		/* Copy the setup packet to local buffer */
 		if (pdata->le_setup_buf) {
 			u32 *p = (u32 *)buffer_ptr;
-			u32 *s = (u32 *)qh->setup_buffer;
+			__le32 *s = (__force __le32 *)qh->setup_buffer;
 
 			/* Convert little endian setup buffer to CPU endian */
 			*p++ = le32_to_cpu(*s++);
@@ -2151,10 +2151,10 @@ static int fsl_proc_read(struct seq_file *m, void *v)
 
 #ifndef CONFIG_ARCH_MXC
 	if (udc->pdata->have_sysif_regs) {
-		tmp_reg = usb_sys_regs->snoop1;
+		tmp_reg = __raw_readl(&usb_sys_regs->snoop1);
 		seq_printf(m, "Snoop1 Reg : = [0x%x]\n\n", tmp_reg);
 
-		tmp_reg = usb_sys_regs->control;
+		tmp_reg = __raw_readl(&usb_sys_regs->control);
 		seq_printf(m, "General Control Reg : = [0x%x]\n\n", tmp_reg);
 	}
 #endif
@@ -2416,7 +2416,7 @@ static int fsl_udc_probe(struct platform_device *pdev)
 
 #ifndef CONFIG_ARCH_MXC
 	if (pdata->have_sysif_regs)
-		usb_sys_regs = (void *)dr_regs + USB_DR_SYS_OFFSET;
+		usb_sys_regs = (void __iomem *)dr_regs + USB_DR_SYS_OFFSET;
 #endif
 
 	/* Initialize USB clocks */
