@@ -787,10 +787,9 @@ static struct ep_td_struct *fsl_build_dtd(struct fsl_req *req, unsigned *length,
 		return dtd;
 
 	dtd->td_dma = *dma;
-	/* Clear reserved field */
-	swap_temp = hc32_to_cpu(dtd->size_ioc_sts);
-	swap_temp &= ~DTD_RESERVED_FIELDS;
-	dtd->size_ioc_sts = cpu_to_hc32(swap_temp);
+	/* Clear reserved field's */
+	dtd->next_td_ptr = cpu_to_hc32(DTD_NEXT_TERMINATE);
+	dtd->size_ioc_sts = cpu_to_hc32(0);
 
 	/* Init all of buffer page pointers */
 	swap_temp = (u32) (req->req.dma + req->req.actual);
