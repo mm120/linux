@@ -10,6 +10,28 @@
 #include <linux/binfmts.h>
 
 /*
+ * Tracepoint for RT throtteling
+ */
+TRACE_EVENT(sched_throttle,
+
+	TP_PROTO(u64 rt_time, u64 runtime),
+
+	TP_ARGS(rt_time, runtime),
+
+	TP_STRUCT__entry(
+		__field(	u64,	rt_time	)
+		__field(	u64,	runtime	)
+	),
+
+	TP_fast_assign(
+		__entry->rt_time	= rt_time;
+		__entry->runtime	= runtime;
+	),
+
+	TP_printk("time %llu  runtime %llu", __entry->rt_time, __entry->runtime)
+);
+
+/*
  * Tracepoint for calling kthread_stop, performed to end a kthread:
  */
 TRACE_EVENT(sched_kthread_stop,
