@@ -1498,10 +1498,16 @@ static int gfar_get_ts_info(struct net_device *dev,
 	return 0;
 }
 
+static int gfar_nway_reset(struct net_device *netdev)
+{
+	return genphy_restart_aneg(netdev->phydev);
+}
+
 const struct ethtool_ops gfar_ethtool_ops = {
 	.get_drvinfo = gfar_gdrvinfo,
 	.get_regs_len = gfar_reglen,
 	.get_regs = gfar_get_regs,
+	.nway_reset = gfar_nway_reset,
 	.get_link = ethtool_op_get_link,
 	.get_coalesce = gfar_gcoalesce,
 	.set_coalesce = gfar_scoalesce,
