@@ -30,6 +30,13 @@ extern void udelay(unsigned long usecs);
 #define mdelay(n)	udelay((n) * 1000)
 #endif
 
+/*
+ * We can normally get better resolution than 1us, so we might as well
+ * expose it.
+ */
+extern void ndelay(unsigned long nsecs);
+#define ndelay(n)	ndelay(n)
+
 /**
  * spin_event_timeout - spin until a condition gets true or a timeout elapses
  * @condition: a C expression to evalate
