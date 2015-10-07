@@ -655,7 +655,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 	if (of_device_is_compatible(np, "fsl,etsec2")) {
 		mode = MQ_MG_MODE;
-		poll_mode = GFAR_SQ_POLLING;
+		poll_mode = GFAR_MQ_POLLING;
 	} else {
 		mode = SQ_SG_MODE;
 		poll_mode = GFAR_SQ_POLLING;
@@ -717,6 +717,9 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 	priv->mode = mode;
 	priv->poll_mode = poll_mode;
+
+	if (poll_mode == GFAR_MQ_POLLING)
+		priv->prio_sched_en = 1;
 
 	priv->num_tx_queues = num_tx_qs;
 	netif_set_real_num_rx_queues(dev, num_rx_qs);
