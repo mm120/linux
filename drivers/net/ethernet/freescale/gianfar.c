@@ -109,6 +109,9 @@ MODULE_AUTHOR("Freescale Semiconductor, Inc");
 MODULE_DESCRIPTION("Gianfar Ethernet Driver");
 MODULE_LICENSE("GPL");
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/gianfar.h>
+
 static void gfar_init_rxbdp(struct gfar_priv_rx_q *rx_queue, struct rxbd8 *bdp,
 			    dma_addr_t buf)
 {
@@ -1855,6 +1858,7 @@ static netdev_tx_t gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* check if there is space to queue this packet */
 	if (nr_txbds > tx_queue->num_txbdfree) {
 		/* no space, stop the queue */
+		trace_gianfar_tx_no_bds(tx_queue->num_txbdfree, nr_txbds);
 		netif_tx_stop_queue(txq);
 		dev->stats.tx_fifo_errors++;
 		return NETDEV_TX_BUSY;
@@ -2773,11 +2777,16 @@ static int gfar_poll_tx(struct napi_struct *napi, int budget)
 		u32 imask;
 		napi_complete(napi);
 
+		trace_gianfar_poll_tx_complete(0);
+
 		spin_lock_irq(&gfargrp->grplock);
 		imask = gfar_read(&regs->imask);
 		imask |= IMASK_TX_DEFAULT;
 		gfar_write(&regs->imask, imask);
 		spin_unlock_irq(&gfargrp->grplock);
+	} else {
+		trace_gianfar_poll_tx_kick(has_tx_work, 0,
+			gfar_read(&regs->tstat));
 	}
 
 	return 0;
