@@ -2048,6 +2048,15 @@ static netdev_tx_t gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev->stats.tx_fifo_errors++;
 	}
 
+	/*
+	 * TODO - FIXME !!!!
+	 *
+	 * Delay for 500 ns.
+	 *
+	 * I don't understand why this makes everything work...
+	 */
+	ndelay(500);
+
 	/* Tell the DMA to go go go */
 	gfar_write(&regs->tstat, TSTAT_CLEAR_THALT >> tx_queue->qindex);
 
@@ -2374,17 +2383,35 @@ static irqreturn_t gfar_receive(int irq, void *grp_id)
 		return IRQ_HANDLED;
 	}
 
+	/* Clear IEVENT, so interrupts aren't called again
+	 * because of the packets that have already arrived.
+	 */
+	gfar_write(&grp->regs->ievent, IEVENT_RX_MASK);
+
 	if (likely(napi_schedule_prep(&grp->napi_rx))) {
 		gfar_int_disable_mask(grp, IMASK_RX_DEFAULT);
 		__napi_schedule(&grp->napi_rx);
-	} else {
-		/* Clear IEVENT, so interrupts aren't called again
-		 * because of the packets that have already arrived.
-		 */
-		gfar_write(&grp->regs->ievent, IEVENT_RX_MASK);
 	}
 
 	return IRQ_HANDLED;
+}
+
+static void gfar_poll_tx_coal(struct gfar_priv_grp *gfargrp)
+{
+	struct gfar_private *priv = gfargrp->priv;
+	struct gfar __iomem *regs = gfargrp->regs;
+	struct gfar_priv_tx_q *tx_queue = NULL;
+	int i;
+
+	for_each_set_bit(i, &gfargrp->tx_bit_map, priv->num_tx_queues) {
+		tx_queue = priv->tx_queue[i];
+		/* run Tx cleanup to completion */
+		if (tx_queue->tx_skbuff[tx_queue->skb_dirtytx]) {
+			gfar_clean_tx_ring(tx_queue);
+		}
+	}
+
+	trace_gianfar_poll_tx_complete(gfar_read(&regs->tstat));
 }
 
 /* Interrupt Handler for Transmit complete */
@@ -2392,15 +2419,20 @@ static irqreturn_t gfar_transmit(int irq, void *grp_id)
 {
 	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
 
+	/* Clear IEVENT, so interrupts aren't called again
+	 * because of the packets that have already arrived.
+	 */
+	gfar_write(&grp->regs->ievent, IEVENT_TX_MASK);
+
+#if 0
 	if (likely(napi_schedule_prep(&grp->napi_tx))) {
 		gfar_int_disable_mask(grp, IMASK_TX_DEFAULT);
+
 		__napi_schedule(&grp->napi_tx);
-	} else {
-		/* Clear IEVENT, so interrupts aren't called again
-		 * because of the packets that have already arrived.
-		 */
-		gfar_write(&grp->regs->ievent, IEVENT_TX_MASK);
 	}
+#else
+	gfar_poll_tx_coal(grp);
+#endif
 
 	return IRQ_HANDLED;
 }
@@ -2815,7 +2847,7 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 			   events, gfar_read(&regs->imask));
 
 	/* Update the error counters */
-	if (events & IEVENT_TXE) {
+	if (events & (IEVENT_TXE | IEVENT_LC | IEVENT_CRL | IEVENT_XFUN)) {
 		dev->stats.tx_errors++;
 
 		if (events & IEVENT_LC)
