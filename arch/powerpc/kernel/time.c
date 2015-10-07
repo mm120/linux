@@ -479,6 +479,12 @@ void udelay(unsigned long usecs)
 }
 EXPORT_SYMBOL(udelay);
 
+void ndelay(unsigned long nsecs)
+{
+	__delay(DIV_ROUND_UP(tb_ticks_per_usec * nsecs, 1000));
+}
+EXPORT_SYMBOL(ndelay);
+
 #ifdef CONFIG_SMP
 unsigned long profile_pc(struct pt_regs *regs)
 {
