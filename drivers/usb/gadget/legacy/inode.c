@@ -866,6 +866,11 @@ static void ep0_complete (struct usb_ep *ep, struct usb_request *req)
 	unsigned long		flags;
 	int			free = 1;
 
+	/* If the gadget device is torn down with a transaction still
+	 * outstanding, we can get here with ep->driver_data NULL. */
+	if (!dev)
+		return;
+
 	/* for control OUT, data must still get to userspace */
 	spin_lock_irqsave(&dev->lock, flags);
 	if (!dev->setup_in) {
