@@ -446,7 +446,6 @@ struct fsl_req {
 	/* ep_queue() func will add
 	   a request->queue into a udc_ep->queue 'd tail */
 	struct fsl_ep *ep;
-	unsigned mapped:1;
 
 	struct ep_td_struct *head, *tail;	/* For dTD List
 						   cpu endian Virtual addr */
