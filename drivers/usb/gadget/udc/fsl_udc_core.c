@@ -521,9 +521,9 @@ static void ep0_setup(struct fsl_udc *udc)
 	/* the initialization of an ep includes: fields in QH, Regs,
 	 * fsl_ep struct */
 	struct_ep_qh_setup(udc, 0, USB_RECV, USB_ENDPOINT_XFER_CONTROL,
-			USB_MAX_CTRL_PAYLOAD, 0, 0);
+			USB_MAX_CTRL_PAYLOAD, 1, 0);
 	struct_ep_qh_setup(udc, 0, USB_SEND, USB_ENDPOINT_XFER_CONTROL,
-			USB_MAX_CTRL_PAYLOAD, 0, 0);
+			USB_MAX_CTRL_PAYLOAD, 1, 0);
 	dr_ep_setup(0, USB_RECV, USB_ENDPOINT_XFER_CONTROL);
 	dr_ep_setup(0, USB_SEND, USB_ENDPOINT_XFER_CONTROL);
 
@@ -789,6 +789,7 @@ static struct ep_td_struct *fsl_build_dtd(struct fsl_req *req, unsigned *length,
 	dtd->td_dma = *dma;
 	/* Clear reserved field's */
 	dtd->next_td_ptr = cpu_to_hc32(DTD_NEXT_TERMINATE);
+	dtd->next_td_virt = NULL;
 	dtd->size_ioc_sts = cpu_to_hc32(0);
 
 	/* Init all of buffer page pointers */
@@ -857,6 +858,7 @@ static int fsl_req_to_dtd(struct fsl_req *req, gfp_t gfp_flags)
 	} while (!is_last);
 
 	dtd->next_td_ptr = cpu_to_hc32(DTD_NEXT_TERMINATE);
+	dtd->next_td_virt = NULL;
 
 	req->tail = dtd;
 
