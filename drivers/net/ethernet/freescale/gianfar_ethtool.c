@@ -61,6 +61,30 @@ static const char stat_gstrings[][ETH_GSTRING_LEN] = {
 	"tx-babbling-errors",
 	"tx-underrun-errors",
 	"tx-timeout-errors",
+	"rx-bytes-q-0",
+	"rx-bytes-q-1",
+	"rx-bytes-q-2",
+	"rx-bytes-q-3",
+	"rx-bytes-q-4",
+	"rx-bytes-q-5",
+	"rx-bytes-q-6",
+	"rx-bytes-q-7",
+	"rx-packets-q-0",
+	"rx-packets-q-1",
+	"rx-packets-q-2",
+	"rx-packets-q-3",
+	"rx-packets-q-4",
+	"rx-packets-q-5",
+	"rx-packets-q-6",
+	"rx-packets-q-7",
+	"rx-dropped-q-0",
+	"rx-dropped-q-1",
+	"rx-dropped-q-2",
+	"rx-dropped-q-3",
+	"rx-dropped-q-4",
+	"rx-dropped-q-5",
+	"rx-dropped-q-6",
+	"rx-dropped-q-7",
 	/* rmon stats */
 	"tx-rx-64-frames",
 	"tx-rx-65-127-frames",
@@ -118,7 +142,7 @@ static void gfar_gstrings(struct net_device *dev, u32 stringset, u8 * buf)
 		memcpy(buf, stat_gstrings, GFAR_STATS_LEN * ETH_GSTRING_LEN);
 	else
 		memcpy(buf, stat_gstrings,
-		       GFAR_EXTRA_STATS_LEN * ETH_GSTRING_LEN);
+		       (GFAR_EXTRA_STATS_LEN + GFAR_PER_Q_STATS_LEN) * ETH_GSTRING_LEN);
 }
 
 /* Fill in an array of 64-bit statistics from various sources.
@@ -133,8 +157,20 @@ static void gfar_fill_stats(struct net_device *dev, struct ethtool_stats *dummy,
 	struct gfar __iomem *regs = priv->gfargrp[0].regs;
 	atomic64_t *extra = (atomic64_t *)&priv->extra_stats;
 
-	for (i = 0; i < GFAR_EXTRA_STATS_LEN; i++)
-		buf[i] = atomic64_read(&extra[i]);
+	for (i = 0; i < GFAR_EXTRA_STATS_LEN + GFAR_PER_Q_STATS_LEN; i++) {
+		if (i < GFAR_EXTRA_STATS_LEN) {
+			buf[i] = atomic64_read(&extra[i]);
+		} else {
+			int q, t;
+			t = (i - GFAR_EXTRA_STATS_LEN) / MAX_RX_QS;
+			q = (i - GFAR_EXTRA_STATS_LEN) % MAX_RX_QS;
+			switch (t) {
+			case 0: buf[i] = priv->rx_queue[q]->stats.rx_bytes; break;
+			case 1: buf[i] = priv->rx_queue[q]->stats.rx_packets; break;
+			case 2: buf[i] = priv->rx_queue[q]->stats.rx_dropped; break;
+			}
+		}
+	}
 
 	if (priv->device_flags & FSL_GIANFAR_DEV_HAS_RMON) {
 		u32 __iomem *rmon = (u32 __iomem *) &regs->rmon;
@@ -153,7 +189,7 @@ static int gfar_sset_count(struct net_device *dev, int sset)
 		if (priv->device_flags & FSL_GIANFAR_DEV_HAS_RMON)
 			return GFAR_STATS_LEN;
 		else
-			return GFAR_EXTRA_STATS_LEN;
+			return GFAR_EXTRA_STATS_LEN + GFAR_PER_Q_STATS_LEN;
 	default:
 		return -EOPNOTSUPP;
 	}
