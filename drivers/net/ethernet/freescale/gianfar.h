@@ -612,12 +612,14 @@ struct gfar_extra_stats {
 	atomic64_t tx_timeout;
 };
 
+#define GFAR_PER_Q_STATS_LEN (3 * MAX_RX_QS)
+
 #define GFAR_RMON_LEN ((sizeof(struct rmon_mib) - 16)/sizeof(u32))
 #define GFAR_EXTRA_STATS_LEN \
 	(sizeof(struct gfar_extra_stats)/sizeof(atomic64_t))
 
 /* Number of stats exported via ethtool */
-#define GFAR_STATS_LEN (GFAR_RMON_LEN + GFAR_EXTRA_STATS_LEN)
+#define GFAR_STATS_LEN (GFAR_RMON_LEN + GFAR_PER_Q_STATS_LEN + GFAR_EXTRA_STATS_LEN)
 
 struct gfar {
 	u32	tsec_id;	/* 0x.000 - Controller ID register */
