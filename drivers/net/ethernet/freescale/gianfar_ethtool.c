@@ -1232,7 +1232,7 @@ static int gfar_convert_to_filer(struct ethtool_rx_flow_spec *rule,
 	/* If there has been nothing written till now, it must be a default */
 	if (tab->index == old_index) {
 		gfar_set_mask(0xFFFFFFFF, tab);
-		tab->fe[tab->index].ctrl = 0x20;
+		tab->fe[tab->index].ctrl = RQFCR_CMP_MATCH;
 		tab->fe[tab->index].prop = 0x0;
 		tab->index++;
 	}
@@ -1242,7 +1242,7 @@ static int gfar_convert_to_filer(struct ethtool_rx_flow_spec *rule,
 
 	/* Specify which queue to use or to drop */
 	if (rule->ring_cookie == RX_CLS_FLOW_DISC)
-		tab->fe[tab->index - 1].ctrl |= RQFCR_RJE;
+		tab->fe[tab->index - 1].ctrl |= RQFCR_REJ;
 	else
 		tab->fe[tab->index - 1].ctrl |= (rule->ring_cookie << 10);
 
@@ -1278,7 +1278,7 @@ static int gfar_write_filer_table(struct gfar_private *priv,
 	/* Last entry must be default accept
 	 * because that's what people expect
 	 */
-	gfar_write_filer(priv, i, 0x20, 0x0);
+	gfar_write_filer(priv, i, RQFCR_CMP_MATCH, 0x0);
 
 	return 0;
 }

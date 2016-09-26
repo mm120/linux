@@ -367,11 +367,21 @@ extern const char gfar_driver_version[];
 #define FPR_FILER_MASK	0xFFFFFFFF
 #define MAX_FILER_IDX	0xFF
 
+#define _mk_RIR(r0, r1, r2, r3, r4, r5, r6, r7) \
+  ((((r0) & 0x7) << 29) |			\
+   (((r1) & 0x7) << 26) |			\
+   (((r2) & 0x7) << 23) |			\
+   (((r3) & 0x7) << 20) |			\
+   (((r4) & 0x7) << 17) |			\
+   (((r5) & 0x7) << 14) |			\
+   (((r6) & 0x7) << 11) |			\
+   (((r7) & 0x7) <<  8))
+
 /* This default RIR value directly corresponds
  * to the 3-bit hash value generated */
-#define DEFAULT_8RXQ_RIR0	0x05397700
+#define DEFAULT_8RXQ_RIR0	_mk_RIR(0,1,2,3,4,5,6,7)
 /* Map even hash values to Q0, and odd ones to Q1 */
-#define DEFAULT_2RXQ_RIR0	0x04104100
+#define DEFAULT_2RXQ_RIR0	_mk_RIR(0,1,0,1,0,1,0,1)
 
 /* RQFCR register bits */
 #define RQFCR_GPI		0x80000000
@@ -383,7 +393,7 @@ extern const char gfar_driver_version[];
 #define RQFCR_HASH		0x00010000
 #define RQFCR_QUEUE		0x0000FC00
 #define RQFCR_CLE		0x00000200
-#define RQFCR_RJE		0x00000100
+#define RQFCR_REJ		0x00000100
 #define RQFCR_AND		0x00000080
 #define RQFCR_CMP_EXACT		0x00000000
 #define RQFCR_CMP_MATCH		0x00000020
