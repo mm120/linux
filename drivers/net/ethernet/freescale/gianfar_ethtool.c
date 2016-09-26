@@ -1291,7 +1291,7 @@ static int gfar_check_capability(struct ethtool_rx_flow_spec *flow,
 		if (~flow->m_ext.data[0] || ~flow->m_ext.data[1])
 			netdev_warn(priv->ndev,
 				    "User-specific data not supported!\n");
-		if (~flow->m_ext.vlan_etype)
+		if (flow->m_ext.vlan_etype != cpu_to_be16(0xFFFF))
 			netdev_warn(priv->ndev,
 				    "VLAN-etype not supported!\n");
 	}
