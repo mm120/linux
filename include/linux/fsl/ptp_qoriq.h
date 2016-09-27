@@ -140,7 +140,7 @@ struct ptp_qoriq_registers {
 struct ptp_qoriq {
 	void __iomem *base;
 	struct ptp_qoriq_registers regs;
-	spinlock_t lock; /* protects regs */
+	raw_spinlock_t lock; /* protects regs */
 	struct ptp_clock *clock;
 	struct ptp_clock_info caps;
 	struct resource *rsrc;
