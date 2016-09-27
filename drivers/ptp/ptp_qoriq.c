@@ -128,13 +128,14 @@ irqreturn_t ptp_qoriq_isr(int irq, void *priv)
 	struct ptp_clock_event event;
 	u64 ns;
 	u32 ack = 0, lo, hi, mask, val, irqs;
+	unsigned long flags;
 
-	spin_lock(&ptp_qoriq->lock);
+	raw_spin_lock_irqsave(&ptp_qoriq->lock, flags);
 
 	val = ptp_qoriq->read(&regs->ctrl_regs->tmr_tevent);
 	mask = ptp_qoriq->read(&regs->ctrl_regs->tmr_temask);
 
-	spin_unlock(&ptp_qoriq->lock);
+	raw_spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
 
 	irqs = val & mask;
 
@@ -164,11 +165,11 @@ irqreturn_t ptp_qoriq_isr(int irq, void *priv)
 			ptp_qoriq->write(&regs->alarm_regs->tmr_alarm2_h, hi);
 			ptp_qoriq->alarm_value = ns;
 		} else {
-			spin_lock(&ptp_qoriq->lock);
+			raw_spin_lock_irqsave(&ptp_qoriq->lock, flags);
 			mask = ptp_qoriq->read(&regs->ctrl_regs->tmr_temask);
 			mask &= ~ALM2EN;
 			ptp_qoriq->write(&regs->ctrl_regs->tmr_temask, mask);
-			spin_unlock(&ptp_qoriq->lock);
+			raw_spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
 			ptp_qoriq->alarm_value = 0;
 			ptp_qoriq->alarm_interval = 0;
 		}
@@ -245,14 +246,14 @@ int ptp_qoriq_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	unsigned long flags;
 	struct ptp_qoriq *ptp_qoriq = container_of(ptp, struct ptp_qoriq, caps);
 
-	spin_lock_irqsave(&ptp_qoriq->lock, flags);
+	raw_spin_lock_irqsave(&ptp_qoriq->lock, flags);
 
 	now = tmr_cnt_read(ptp_qoriq);
 	now += delta;
 	tmr_cnt_write(ptp_qoriq, now);
 	set_fipers(ptp_qoriq);
 
-	spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
+	raw_spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
 
 	return 0;
 }
@@ -264,11 +265,11 @@ int ptp_qoriq_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 	unsigned long flags;
 	struct ptp_qoriq *ptp_qoriq = container_of(ptp, struct ptp_qoriq, caps);
 
-	spin_lock_irqsave(&ptp_qoriq->lock, flags);
+	raw_spin_lock_irqsave(&ptp_qoriq->lock, flags);
 
 	ns = tmr_cnt_read(ptp_qoriq);
 
-	spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
+	raw_spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
 
 	*ts = ns_to_timespec64(ns);
 
@@ -285,12 +286,12 @@ int ptp_qoriq_settime(struct ptp_clock_info *ptp,
 
 	ns = timespec64_to_ns(ts);
 
-	spin_lock_irqsave(&ptp_qoriq->lock, flags);
+	raw_spin_lock_irqsave(&ptp_qoriq->lock, flags);
 
 	tmr_cnt_write(ptp_qoriq, ns);
 	set_fipers(ptp_qoriq);
 
-	spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
+	raw_spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
 
 	return 0;
 }
@@ -328,7 +329,7 @@ int ptp_qoriq_enable(struct ptp_clock_info *ptp,
 		return -EOPNOTSUPP;
 	}
 
-	spin_lock_irqsave(&ptp_qoriq->lock, flags);
+	raw_spin_lock_irqsave(&ptp_qoriq->lock, flags);
 
 	mask = ptp_qoriq->read(&regs->ctrl_regs->tmr_temask);
 	if (on) {
@@ -340,7 +341,7 @@ int ptp_qoriq_enable(struct ptp_clock_info *ptp,
 
 	ptp_qoriq->write(&regs->ctrl_regs->tmr_temask, mask);
 
-	spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
+	raw_spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ptp_qoriq_enable);
@@ -579,7 +580,7 @@ int ptp_qoriq_init(struct ptp_qoriq *ptp_qoriq, void __iomem *base,
 		ptp_qoriq->regs.etts_regs = base + ETTS_REGS_OFFSET;
 	}
 
-	spin_lock_init(&ptp_qoriq->lock);
+	raw_spin_lock_init(&ptp_qoriq->lock);
 
 	ktime_get_real_ts64(&now);
 	ptp_qoriq_settime(&ptp_qoriq->caps, &now);
@@ -589,7 +590,7 @@ int ptp_qoriq_init(struct ptp_qoriq *ptp_qoriq, void __iomem *base,
 	  (ptp_qoriq->cksel & CKSEL_MASK) << CKSEL_SHIFT |
 	  (ptp_qoriq->bypass ? BYP : 0);
 
-	spin_lock_irqsave(&ptp_qoriq->lock, flags);
+	raw_spin_lock_irqsave(&ptp_qoriq->lock, flags);
 
 	regs = &ptp_qoriq->regs;
 	ptp_qoriq->write(&regs->ctrl_regs->tmr_ctrl, tmr_ctrl);
@@ -601,7 +602,7 @@ int ptp_qoriq_init(struct ptp_qoriq *ptp_qoriq, void __iomem *base,
 	ptp_qoriq->write(&regs->ctrl_regs->tmr_ctrl,
 			 tmr_ctrl|FIPERST|RTPE|TE|FRD);
 
-	spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
+	raw_spin_unlock_irqrestore(&ptp_qoriq->lock, flags);
 
 	ptp_qoriq->clock = ptp_clock_register(&ptp_qoriq->caps, ptp_qoriq->dev);
 	if (IS_ERR(ptp_qoriq->clock))
