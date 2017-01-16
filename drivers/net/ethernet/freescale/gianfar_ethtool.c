@@ -43,7 +43,7 @@
 
 #include "gianfar.h"
 
-#define GFAR_MAX_COAL_USECS 0xffff
+#define GFAR_MAX_COAL_TICKS 0xffff
 #define GFAR_MAX_COAL_FRAMES 0xff
 
 static const char stat_gstrings[][ETH_GSTRING_LEN] = {
@@ -189,59 +189,49 @@ static void gfar_get_regs(struct net_device *dev, struct ethtool_regs *regs,
 		buf[i] = gfar_read(&theregs[i]);
 }
 
-/* Convert microseconds to ethernet clock ticks, which changes
- * depending on what speed the controller is running at */
+static u32 busfreq = -1;
+static u32 fsl_get_bus_freq(void)
+{
+        struct device_node *soc;
+        const u32 *prop;
+        int size;
+
+        if (busfreq != -1)
+                return busfreq;
+
+        soc = of_find_node_by_type(NULL, "soc");
+        if (!soc)
+                return -1;
+
+	prop = of_get_property(soc, "bus-frequency", &size);
+	if (!prop || size != sizeof(*prop) || *prop == 0) {
+		prop = of_get_property(soc, "clock-frequency", &size);
+		if (prop && size == sizeof(*prop))
+			busfreq = *prop / 2;
+	} else {
+		busfreq = *prop;
+	}
+
+        of_node_put(soc);
+        return busfreq;
+}
+
+/* Convert microseconds to CCB/2 clock ticks */
 static unsigned int gfar_usecs2ticks(struct gfar_private *priv,
 				     unsigned int usecs)
 {
-	struct net_device *ndev = priv->ndev;
-	struct phy_device *phydev = ndev->phydev;
-	unsigned int count;
-
-	/* The timer is different, depending on the interface speed */
-	switch (phydev->speed) {
-	case SPEED_1000:
-		count = GFAR_GBIT_TIME;
-		break;
-	case SPEED_100:
-		count = GFAR_100_TIME;
-		break;
-	case SPEED_10:
-	default:
-		count = GFAR_10_TIME;
-		break;
-	}
-
-	/* Make sure we return a number greater than 0
-	 * if usecs > 0 */
-	return DIV_ROUND_UP(usecs * 1000, count);
+	unsigned int ticks =
+		DIV_ROUND_UP_ULL((unsigned long long)usecs * fsl_get_bus_freq(),
+				 1000000 * 64 * 2);
+	return clamp_t(unsigned int, ticks, 1, IC_ICTT_MASK);
 }
 
-/* Convert ethernet clock ticks to microseconds */
+/* Convert CCB/2 clock ticks to microseconds */
 static unsigned int gfar_ticks2usecs(struct gfar_private *priv,
 				     unsigned int ticks)
 {
-	struct net_device *ndev = priv->ndev;
-	struct phy_device *phydev = ndev->phydev;
-	unsigned int count;
-
-	/* The timer is different, depending on the interface speed */
-	switch (phydev->speed) {
-	case SPEED_1000:
-		count = GFAR_GBIT_TIME;
-		break;
-	case SPEED_100:
-		count = GFAR_100_TIME;
-		break;
-	case SPEED_10:
-	default:
-		count = GFAR_10_TIME;
-		break;
-	}
-
-	/* Make sure we return a number greater than 0 */
-	/* if ticks is > 0 */
-	return (ticks * count) / 1000;
+	return DIV_ROUND_UP_ULL((unsigned long long)ticks * 1000000 * 64 * 2,
+				fsl_get_bus_freq());
 }
 
 /* Get the coalescing parameters, and put them in the cvals
@@ -325,9 +315,10 @@ static int gfar_scoalesce(struct net_device *dev,
 		return -ENODEV;
 
 	/* Check the bounds of the values */
-	if (cvals->rx_coalesce_usecs > GFAR_MAX_COAL_USECS) {
+	if (cvals->rx_coalesce_usecs >
+	    gfar_ticks2usecs(priv, GFAR_MAX_COAL_TICKS)) {
 		netdev_info(dev, "Coalescing is limited to %d microseconds\n",
-			    GFAR_MAX_COAL_USECS);
+			    gfar_ticks2usecs(priv, GFAR_MAX_COAL_TICKS));
 		return -EINVAL;
 	}
 
@@ -338,9 +329,10 @@ static int gfar_scoalesce(struct net_device *dev,
 	}
 
 	/* Check the bounds of the values */
-	if (cvals->tx_coalesce_usecs > GFAR_MAX_COAL_USECS) {
+	if (cvals->tx_coalesce_usecs >
+	    gfar_ticks2usecs(priv, GFAR_MAX_COAL_TICKS)) {
 		netdev_info(dev, "Coalescing is limited to %d microseconds\n",
-			    GFAR_MAX_COAL_USECS);
+			    gfar_ticks2usecs(priv, GFAR_MAX_COAL_TICKS));
 		return -EINVAL;
 	}
 
