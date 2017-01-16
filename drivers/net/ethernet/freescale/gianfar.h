@@ -107,20 +107,6 @@ extern const char gfar_driver_version[];
 /* The number of Exact Match registers */
 #define GFAR_EM_NUM	15
 
-/* Latency of interface clock in nanoseconds */
-/* Interface clock latency , in this case, means the
- * time described by a value of 1 in the interrupt
- * coalescing registers' time fields.  Since those fields
- * refer to the time it takes for 64 clocks to pass, the
- * latencies are as such:
- * GBIT = 125MHz => 8ns/clock => 8*64 ns / tick
- * 100 = 25 MHz => 40ns/clock => 40*64 ns / tick
- * 10 = 2.5 MHz => 400ns/clock => 400*64 ns / tick
- */
-#define GFAR_GBIT_TIME  512
-#define GFAR_100_TIME   2560
-#define GFAR_10_TIME    25600
-
 #define DEFAULT_TX_COALESCE 1
 #define DEFAULT_TXCOUNT	16
 #define DEFAULT_TXTIME	21
@@ -229,6 +215,7 @@ extern const char gfar_driver_version[];
 
 /* Interrupt coalescing macros */
 #define IC_ICEN			0x80000000
+#define IC_ICCS                 0x40000000
 #define IC_ICFT_MASK		0x1fe00000
 #define IC_ICFT_SHIFT		21
 #define mk_ic_icft(x)		\
@@ -236,7 +223,7 @@ extern const char gfar_driver_version[];
 #define IC_ICTT_MASK		0x0000ffff
 #define mk_ic_ictt(x)		(x&IC_ICTT_MASK)
 
-#define mk_ic_value(count, time) (IC_ICEN | \
+#define mk_ic_value(count, time) (IC_ICEN | IC_ICCS | \
 				mk_ic_icft(count) | \
 				mk_ic_ictt(time))
 #define get_icft_value(ic)	(((unsigned long)ic & IC_ICFT_MASK) >> \
