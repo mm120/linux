@@ -24,6 +24,8 @@
 #include "xhci-debugfs.h"
 #include "xhci-dbgcap.h"
 
+#include "xhci-fwdload.c"
+
 #define DRIVER_AUTHOR "Sarah Sharp"
 #define DRIVER_DESC "'eXtensible' Host Controller (xHC) Driver"
 
@@ -5185,7 +5187,11 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 		return 0;
 	}
 
+
 	mutex_init(&xhci->mutex);
+
+	XHCI_FWDOWNLOAD(hcd);
+
 	xhci->cap_regs = hcd->regs;
 	xhci->op_regs = hcd->regs +
 		HC_LENGTH(readl(&xhci->cap_regs->hc_capbase));
