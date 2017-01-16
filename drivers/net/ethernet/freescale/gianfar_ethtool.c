@@ -236,8 +236,8 @@ static unsigned int gfar_ticks2usecs(struct gfar_private *priv,
 
 /* Get the coalescing parameters, and put them in the cvals
  * structure.  */
-static int gfar_gcoalesce(struct net_device *dev,
-			  struct ethtool_coalesce *cvals)
+static int gfar_per_queue_gcoalesce(struct net_device *dev, u32 q_num,
+				    struct ethtool_coalesce *cvals)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	struct gfar_priv_rx_q *rx_queue = NULL;
@@ -250,21 +250,31 @@ static int gfar_gcoalesce(struct net_device *dev,
 	if (!(priv->device_flags & FSL_GIANFAR_DEV_HAS_COALESCE))
 		return -EOPNOTSUPP;
 
-	if (!dev->phydev)
+	if (!dev->phydev || q_num >= MAX_RX_QS)
 		return -ENODEV;
 
-	rx_queue = priv->rx_queue[0];
-	tx_queue = priv->tx_queue[0];
+	rx_queue = priv->rx_queue[q_num];
+	tx_queue = priv->tx_queue[q_num];
 
-	rxtime  = get_ictt_value(rx_queue->rxic);
-	rxcount = get_icft_value(rx_queue->rxic);
-	txtime  = get_ictt_value(tx_queue->txic);
-	txcount = get_icft_value(tx_queue->txic);
-	cvals->rx_coalesce_usecs = gfar_ticks2usecs(priv, rxtime);
-	cvals->rx_max_coalesced_frames = rxcount;
+	if (tx_queue->txcoalescing) {
+		txtime  = get_ictt_value(tx_queue->txic);
+		txcount = get_icft_value(tx_queue->txic);
+		cvals->tx_coalesce_usecs = gfar_ticks2usecs(priv, txtime);
+		cvals->tx_max_coalesced_frames = txcount;
+	} else {
+		cvals->tx_coalesce_usecs = 0;
+		cvals->tx_max_coalesced_frames = 0;
+	}
 
-	cvals->tx_coalesce_usecs = gfar_ticks2usecs(priv, txtime);
-	cvals->tx_max_coalesced_frames = txcount;
+	if (rx_queue->rxcoalescing) {
+		rxtime  = get_ictt_value(rx_queue->rxic);
+		rxcount = get_icft_value(rx_queue->rxic);
+		cvals->rx_coalesce_usecs = gfar_ticks2usecs(priv, rxtime);
+		cvals->rx_max_coalesced_frames = rxcount;
+	} else {
+		cvals->rx_coalesce_usecs = 0;
+		cvals->rx_max_coalesced_frames = 0;
+	}
 
 	cvals->use_adaptive_rx_coalesce = 0;
 	cvals->use_adaptive_tx_coalesce = 0;
@@ -302,11 +312,14 @@ static int gfar_gcoalesce(struct net_device *dev,
  * Both cvals->*_usecs and cvals->*_frames have to be > 0
  * in order for coalescing to be active
  */
-static int gfar_scoalesce(struct net_device *dev,
-			  struct ethtool_coalesce *cvals)
+static int gfar_multi_queue_scoalesce(struct net_device *dev,
+				      unsigned long rx_queue_mask,
+				      unsigned long tx_queue_mask,
+				      struct ethtool_coalesce *cvals)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	int i, err = 0;
+	unsigned int flag;
 
 	if (!(priv->device_flags & FSL_GIANFAR_DEV_HAS_COALESCE))
 		return -EOPNOTSUPP;
@@ -346,32 +359,22 @@ static int gfar_scoalesce(struct net_device *dev,
 		cpu_relax();
 
 	/* Set up rx coalescing */
-	if ((cvals->rx_coalesce_usecs == 0) ||
-	    (cvals->rx_max_coalesced_frames == 0)) {
-		for (i = 0; i < priv->num_rx_queues; i++)
-			priv->rx_queue[i]->rxcoalescing = 0;
-	} else {
-		for (i = 0; i < priv->num_rx_queues; i++)
-			priv->rx_queue[i]->rxcoalescing = 1;
-	}
+	flag = ((cvals->rx_coalesce_usecs == 0) ||
+		(cvals->rx_max_coalesced_frames == 0)) ? 0 : 1;
 
-	for (i = 0; i < priv->num_rx_queues; i++) {
+	for_each_set_bit(i, &rx_queue_mask, priv->num_rx_queues) {
+		priv->rx_queue[i]->rxcoalescing = flag;
 		priv->rx_queue[i]->rxic = mk_ic_value(
 			cvals->rx_max_coalesced_frames,
 			gfar_usecs2ticks(priv, cvals->rx_coalesce_usecs));
 	}
 
 	/* Set up tx coalescing */
-	if ((cvals->tx_coalesce_usecs == 0) ||
-	    (cvals->tx_max_coalesced_frames == 0)) {
-		for (i = 0; i < priv->num_tx_queues; i++)
-			priv->tx_queue[i]->txcoalescing = 0;
-	} else {
-		for (i = 0; i < priv->num_tx_queues; i++)
-			priv->tx_queue[i]->txcoalescing = 1;
-	}
+	flag = ((cvals->tx_coalesce_usecs == 0) ||
+		(cvals->tx_max_coalesced_frames == 0)) ? 0 : 1;
 
-	for (i = 0; i < priv->num_tx_queues; i++) {
+	for_each_set_bit(i, &tx_queue_mask, priv->num_tx_queues) {
+		priv->tx_queue[i]->txcoalescing = flag;
 		priv->tx_queue[i]->txic = mk_ic_value(
 			cvals->tx_max_coalesced_frames,
 			gfar_usecs2ticks(priv, cvals->tx_coalesce_usecs));
@@ -387,6 +390,35 @@ static int gfar_scoalesce(struct net_device *dev,
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
 
 	return err;
+}
+
+static int gfar_per_queue_scoalesce(struct net_device *dev, u32 q_num,
+				    struct ethtool_coalesce *cvals)
+{
+	struct gfar_private *priv = netdev_priv(dev);
+
+	if (q_num >= priv->num_rx_queues && q_num >= priv->num_tx_queues)
+		return -ENODEV;
+
+	return gfar_multi_queue_scoalesce(dev, 1 << q_num, 1 << q_num, cvals);
+}
+
+/* Get the coalescing parameters, and put them in the cvals
+ * structure.  */
+static int gfar_gcoalesce(struct net_device *dev,
+			  struct ethtool_coalesce *cvals)
+{
+	return gfar_per_queue_gcoalesce(dev, 0, cvals);
+}
+
+static int gfar_scoalesce(struct net_device *dev,
+			  struct ethtool_coalesce *cvals)
+{
+	struct gfar_private *priv = netdev_priv(dev);
+
+	return gfar_multi_queue_scoalesce(dev,
+					  (1 << priv->num_rx_queues) - 1,
+					  (1 << priv->num_tx_queues) - 1, cvals);
 }
 
 /* Fills in rvals with the current ring parameters.  Currently,
@@ -1529,4 +1561,6 @@ const struct ethtool_ops gfar_ethtool_ops = {
 	.get_ts_info = gfar_get_ts_info,
 	.get_link_ksettings = phy_ethtool_get_link_ksettings,
 	.set_link_ksettings = phy_ethtool_set_link_ksettings,
+	.set_per_queue_coalesce = gfar_per_queue_scoalesce,
+	.get_per_queue_coalesce = gfar_per_queue_gcoalesce
 };
