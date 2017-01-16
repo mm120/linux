@@ -22,6 +22,9 @@
 #include	"xhci-ext-caps.h"
 #include "pci-quirks.h"
 
+/* RENESAS FW Download Solution*/
+#include "xhci-fwdload.h"
+
 /* xHCI PCI Configuration Registers */
 #define XHCI_SBRN_OFFSET	(0x60)
 
@@ -1886,6 +1889,9 @@ struct xhci_hcd {
 	u16			test_mode;
 /* Compliance Mode Timer Triggered every 2 seconds */
 #define COMP_MODE_RCVRY_MSECS 2000
+	/* RENESAS FW Download Solution */
+	const struct firmware   *firmware_pointer;
+
 
 	struct dentry		*debugfs_root;
 	struct dentry		*debugfs_slots;
