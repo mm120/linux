@@ -27,8 +27,10 @@
 #endif
 
 /* The maximum address that we can perform a DMA transfer to on this platform */
-/* Doesn't really apply... */
-#define MAX_DMA_ADDRESS		(~0UL)
+/* For the Omicron MAIO board the FPGA can only access the first 1G of
+   memory, so we need to use the DMA pool and limit the DMA memory to
+   the first 1G. */
+#define MAX_DMA_ADDRESS         (0x40000000UL)
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
 #define dma_outb	outb_p
