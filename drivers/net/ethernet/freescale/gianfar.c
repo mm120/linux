@@ -2097,6 +2097,10 @@ static int gfar_change_mtu(struct net_device *dev, int new_mtu)
 
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
 
+	// catch maybe missed link state changes
+	if (dev->flags & IFF_UP)
+	    adjust_link(dev);
+
 	return 0;
 }
 
@@ -2111,6 +2115,9 @@ static void reset_gfar(struct net_device *ndev)
 	startup_gfar(ndev);
 
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
+
+	// catch maybe missed link state changes
+	adjust_link(ndev);
 }
 
 /* gfar_reset_task gets scheduled when a packet has not been

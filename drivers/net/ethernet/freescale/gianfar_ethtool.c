@@ -354,6 +354,7 @@ static int gfar_multi_queue_scoalesce(struct net_device *dev,
 				      struct ethtool_coalesce *cvals)
 {
 	struct gfar_private *priv = netdev_priv(dev);
+	struct phy_device *phydev = dev->phydev;
 	int i, err = 0;
 	unsigned int flag;
 
@@ -425,6 +426,10 @@ static int gfar_multi_queue_scoalesce(struct net_device *dev,
 
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
 
+	// catch maybe missed link state changes
+	if (dev->flags & IFF_UP)
+		phydev->adjust_link(dev);
+
 	return err;
 }
 
@@ -491,6 +496,7 @@ static int gfar_sringparam(struct net_device *dev,
 			   struct ethtool_ringparam *rvals)
 {
 	struct gfar_private *priv = netdev_priv(dev);
+	struct phy_device *phydev = dev->phydev;
 	int err = 0, i;
 
 	if (rvals->rx_pending > GFAR_RX_MAX_RING_SIZE)
@@ -527,6 +533,10 @@ static int gfar_sringparam(struct net_device *dev,
 		err = startup_gfar(dev);
 
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
+
+	// catch maybe missed link state changes
+	if (dev->flags & IFF_UP)
+		phydev->adjust_link(dev);
 
 	return err;
 }
@@ -594,6 +604,7 @@ int gfar_set_features(struct net_device *dev, netdev_features_t features)
 {
 	netdev_features_t changed = dev->features ^ features;
 	struct gfar_private *priv = netdev_priv(dev);
+	struct phy_device *phydev = dev->phydev;
 	int err = 0;
 
 	if (!(changed & (NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_CTAG_RX |
@@ -614,6 +625,10 @@ int gfar_set_features(struct net_device *dev, netdev_features_t features)
 	}
 
 	clear_bit_unlock(GFAR_RESETTING, &priv->state);
+
+	// catch maybe missed link state changes
+	if (dev->flags & IFF_UP)
+		phydev->adjust_link(dev);
 
 	return err;
 }
