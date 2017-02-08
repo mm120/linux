@@ -1491,7 +1491,7 @@ int startup_gfar(struct net_device *ndev)
 	gfar_start(priv);
 
 	/* force link state update after mac reset */
-	priv->oldlink = 0;
+	priv->oldlink = 1;
 	priv->oldspeed = 0;
 	priv->oldduplex = -1;
 
@@ -1706,7 +1706,7 @@ static int init_phy(struct net_device *dev)
 	if (priv->device_flags & FSL_GIANFAR_DEV_HAS_GIGABIT)
 		linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, mask);
 
-	priv->oldlink = 0;
+	priv->oldlink = 1;
 	priv->oldspeed = 0;
 	priv->oldduplex = -1;
 
@@ -3733,7 +3733,7 @@ static int gfar_restore(struct device *dev)
 
 	gfar_start(priv);
 
-	priv->oldlink = 0;
+	priv->oldlink = 1;
 	priv->oldspeed = 0;
 	priv->oldduplex = -1;
 
