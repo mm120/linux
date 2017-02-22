@@ -1050,6 +1050,7 @@ struct gfar_priv_grp {
 	struct gfar_priv_rx_q *rx_queue;
 	unsigned int tstat;
 	unsigned int rstat;
+	u32 extra_rstat;
 
 	struct gfar_private *priv;
 	unsigned long num_tx_queues;
