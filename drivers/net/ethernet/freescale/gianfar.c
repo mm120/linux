@@ -2740,6 +2740,12 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 	gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
 	rstat_rxf = gfar_read(&regs->rstat) & RSTAT_RXF_MASK;
+	rstat_rxf = gfar_read(&regs->rstat);
+
+	rstat_rxf |= gfargrp->extra_rstat;
+	gfargrp->extra_rstat = 0;
+
+	rstat_rxf &= RSTAT_RXF_MASK;
 
 	num_act_queues = bitmap_weight(&rstat_rxf, MAX_RX_QS);
 	if (num_act_queues)
@@ -2760,10 +2766,35 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 			/* clear active queue hw indication */
 			gfar_write(&regs->rstat,
 				   RSTAT_CLEAR_RXF0 >> i);
-			num_act_queues--;
+			/*
+			 * There's a race between checking the ring
+			 * (in gfar_clean_rx_ring) and clearing the
+			 * rstat:RXFn bit.  If the ring gets new
+			 * packets between the clean_rx_ring call and
+			 * the write above, we will stop the RX path.
+			 *
+			 * The solution is to check the ring again, if
+			 * there are any new packets in it we don't
+			 * reduce the number of active queues.  We
+			 * also have to save the fact that the
+			 * rstat:RXFn bit is now (possibly) lying to
+			 * us.
+			 *
+			 * This bug was only exposed after the changes
+			 * to the RX buffer management were made.  We
+			 * now allocate a bunch of buffers at the end
+			 * of clean_rx_ring, which makes the "race
+			 * window" much bigger.
+			 */
+			if (gfar_clean_rx_ring(rx_queue, 1)) {
+				work_done += 1;
+				gfargrp->extra_rstat |= RSTAT_CLEAR_RXF0 >> i;
+			} else {
+				num_act_queues--;
 
-			if (!num_act_queues)
-				break;
+				if (!num_act_queues)
+					break;
+			}
 		}
 	}
 
@@ -2775,6 +2806,13 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 
 		gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
 	}
+
+	/*
+	 * If any bits are set in extra_rstat, we need NAPI to call us
+	 * again.
+	 */
+	if (gfargrp->extra_rstat)
+	    return budget;
 
 	return work_done;
 }
