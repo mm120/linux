@@ -3348,8 +3348,12 @@ static void gfar_hw_init(struct gfar_private *priv)
 	gfar_write(&regs->fifo_tx_starve, DEFAULT_FIFO_TX_STARVE);
 	gfar_write(&regs->fifo_tx_starve_shutoff, DEFAULT_FIFO_TX_STARVE_OFF);
 
-	/* Program the interrupt steering regs, only for MG devices */
-	if (priv->num_grps > 1)
+	/* Program the interrupt steering regs, for MG devices or if
+	 * we are in MQ_MG_MODE (we need this so that the per-Q
+	 * coalescing parameters work, which we might want even with
+	 * only one group).
+	 */
+	if (priv->num_grps > 1 || priv->mode == MQ_MG_MODE)
 		gfar_write_isrg(priv);
 }
 
