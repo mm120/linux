@@ -98,6 +98,10 @@
 #include <linux/phy_fixed.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+#endif /* CONFIG_DEBUG_FS */
 
 #include "gianfar.h"
 
@@ -3082,6 +3086,323 @@ static int gfar_request_irq(struct gfar_private *priv)
 	return 0;
 }
 
+#ifdef CONFIG_DEBUG_FS
+static struct dentry *gfar_fs_dir;
+
+static const char gfar_filer_pid[16][6] = {
+	"MASK", "PARSE", "ARB", "DAH", "DAL", "SAH", "SAL", "ETY",
+	"VID", "PRI", "TOS", "L4P", "DIA", "SIA", "DPT", "SPT",
+};
+
+static const char gfar_op[4][4] = {
+	"==", "==", "!=", "< "
+};
+
+static const char gfar_opm[4][4] = {
+	"00", "01", "10", "11"
+};
+
+static const struct {
+	u32 mask;
+	const char *text;
+} gfar_parse_tab[] = {
+	{ RQFPR_HDR_GE_512, "HDR>=512" },
+	{ RQFPR_LERR,    "LERR" },
+	{ RQFPR_RAR,     "RAR" },
+	{ RQFPR_RARQ,    "RARQ" },
+	{ RQFPR_AR,      "AR" },
+	{ RQFPR_ARQ,     "ARQ" },
+	{ RQFPR_EBC,     "EBC" },
+	{ RQFPR_VLN,     "VLN" },
+	{ RQFPR_CFI,     "CFI" },
+	{ RQFPR_JUM,     "JUM" },
+	{ RQFPR_IPF,     "IPF" },
+	{ RQFPR_FIF,     "FIF" },
+	{ RQFPR_IPV4,    "IPV4" },
+	{ RQFPR_IPV6,    "IPV6" },
+	{ RQFPR_ICC,     "ICC" },
+	{ RQFPR_ICV,     "ICV" },
+	{ RQFPR_TCP,     "TCP" },
+	{ RQFPR_UDP,     "UDP" },
+	{ RQFPR_TUC,     "TUC" },
+	{ RQFPR_TUV,     "TUV" },
+	{ RQFPR_PER,     "PER" },
+	{ RQFPR_EER,     "EER" },
+};
+
+static void gfar_seq_parse(struct seq_file *seq, u32 mask, u32 fpr)
+{
+	int j;
+
+	for (j = 0; j < ARRAY_SIZE(gfar_parse_tab); j++) {
+		if (mask & gfar_parse_tab[j].mask)
+			seq_printf(seq, " %c%s",
+					(fpr & gfar_parse_tab[j].mask) ? '+' : '-',
+					gfar_parse_tab[j].text);
+	}
+}
+
+static int gfar_sysfs_filer_read(struct seq_file *seq, void *v)
+{
+	struct net_device *dev = seq->private;
+	struct gfar_private *priv = netdev_priv(dev);
+	int i;
+	unsigned int fcr, fpr;
+	unsigned int lfcr = 0, lfpr = 0;
+	u32 mask = 0xffffffff;
+
+	seq_printf(seq, "far fcr      fpr        "
+			"gpi H hash  Q cle rej and op pid\n");
+
+	for (i = 0; i <= MAX_FILER_IDX; i++) {
+		gfar_read_filer(priv, i, &fcr, &fpr);
+
+		/* Remove duplicate lines of 0x60,0xffffffff */
+		if (fcr == 0x60 && fpr == 0xffffffff &&
+				fcr == lfcr && fpr == lfpr)
+			continue;
+
+		lfcr = fcr;
+		lfpr = fpr;
+
+		if ((fcr & 0xf) == RQFCR_PID_MASK)
+			mask = fpr;
+
+		seq_printf(seq, "%3d %08x %08x   ", i, fcr, fpr);
+
+		seq_printf(seq, "%s %d %s %2d %s %s %s %s %s",
+				(fcr & RQFCR_GPI) ? "GPI" : "   ",
+				(fcr >> 17) & 0x7,
+				(fcr & RQFCR_HASH) ? "HASH" : "    ",
+				(fcr >> 10) & 0x3f,
+				(fcr & RQFCR_CLE) ? "CLE" : "   ",
+				(fcr & RQFCR_REJ) ? "REJ" : "   ",
+				(fcr & RQFCR_AND) ? "AND" : "   ",
+				((fcr & 0xf) == RQFCR_PID_MASK) ?
+				gfar_opm[(fcr >> 5) & 3] : gfar_op[(fcr >> 5) & 3],
+				gfar_filer_pid[fcr & 0xf]);
+
+		if ((fcr & 0xf) == RQFCR_PID_PARSE) {
+			seq_printf(seq, "   ");
+			gfar_seq_parse(seq, mask, fpr);
+		}
+
+		seq_printf(seq, "\n");
+	}
+	return 0;
+}
+
+static int gfar_sysfs_filer_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, gfar_sysfs_filer_read, inode->i_private);
+}
+
+static const struct file_operations gfar_filer_fops = {
+	.owner = THIS_MODULE,
+	.open = gfar_sysfs_filer_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static void gfar_sysfs_ext(
+		struct seq_file *seq, const struct ethtool_flow_ext *ext)
+{
+	seq_printf(seq, "%04x %04x",
+			ext->vlan_etype,
+			ext->vlan_tci);
+}
+
+static void gfar_sysfs_ether(
+		struct seq_file *seq, const struct ethhdr *ether_spec)
+{
+	seq_printf(seq, "%pM %pM %04x",
+			ether_spec->h_dest,
+			ether_spec->h_source,
+			ether_spec->h_proto);
+}
+
+static void gfar_sysfs_ipv4_user(
+		struct seq_file *seq, const struct ethtool_usrip4_spec *usr_ip4_spec)
+{
+	seq_printf(seq, "%pI4 %pI4  %08x %02x %02x %02x",
+			&usr_ip4_spec->ip4src,
+			&usr_ip4_spec->ip4dst,
+			usr_ip4_spec->l4_4_bytes,
+			usr_ip4_spec->tos,
+			usr_ip4_spec->ip_ver,
+			usr_ip4_spec->proto);
+}
+
+static int gfar_sysfs_nfc_read(struct seq_file *seq, void *v)
+{
+	struct net_device *dev = seq->private;
+	const struct gfar_private *priv = netdev_priv(dev);
+	const struct ethtool_flow_spec_container *comp;
+	const struct ethtool_rx_flow_spec *flow;
+
+	list_for_each_entry(comp, &priv->rx_list.list, list) {
+		flow = &comp->fs;
+
+		seq_printf(seq, "%3d %3lld %02x ",
+				flow->location, flow->ring_cookie,
+				(flow->flow_type >> 24));
+
+		switch (flow->flow_type & ~FLOW_EXT) {
+			case ETHER_FLOW:
+				seq_printf(seq, "ETHER  ");
+				gfar_sysfs_ether(seq, &flow->h_u.ether_spec);
+				seq_printf(seq, "  m ");
+				gfar_sysfs_ether(seq, &flow->m_u.ether_spec);
+				break;
+
+			case IPV4_USER_FLOW:
+				seq_printf(seq, "IPv4U  ");
+				gfar_sysfs_ipv4_user(seq, &flow->h_u.usr_ip4_spec);
+				seq_printf(seq, "  m ");
+				gfar_sysfs_ipv4_user(seq, &flow->m_u.usr_ip4_spec);
+				break;
+
+			default:
+				seq_printf(seq, "%06x  ", flow->flow_type & 0xffffff);
+				seq_printf(seq, "%*ph", sizeof(flow->h_u), &flow->h_u);
+				seq_printf(seq, "  m ");
+				seq_printf(seq, "%*ph", sizeof(flow->m_u), &flow->m_u);
+				break;
+		}
+
+		if (flow->flow_type & FLOW_EXT) {
+			seq_printf(seq, "   ");
+			gfar_sysfs_ext(seq, &flow->h_ext);
+			seq_printf(seq, "  m ");
+			gfar_sysfs_ext(seq, &flow->m_ext);
+		}
+
+		seq_printf(seq, "\n");
+	}
+	return 0;
+}
+
+static int gfar_sysfs_nfc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, gfar_sysfs_nfc_read, inode->i_private);
+}
+
+static const struct file_operations gfar_nfc_fops = {
+	.owner = THIS_MODULE,
+	.open = gfar_sysfs_nfc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int gfar_sysfs_multi_read(struct seq_file *seq, void *v)
+{
+	struct net_device *dev = seq->private;
+	struct netdev_hw_addr *ha;
+
+	if (dev->flags & IFF_PROMISC)
+		seq_printf(seq, "PROMISC\n");
+
+	if (dev->flags & IFF_ALLMULTI)
+		seq_printf(seq, "ALLMULTI\n");
+
+	if (netdev_mc_empty(dev))
+		return 0;
+
+	/* Parse the list, and set the appropriate bits */
+	netdev_for_each_mc_addr(ha, dev)
+		seq_printf(seq, "%02x  %*ph\n", ha->type,
+				(ha->type == NETDEV_HW_ADDR_T_MULTICAST ||
+				 ha->type == NETDEV_HW_ADDR_T_UNICAST) ? 6 :
+				sizeof(ha->addr), ha->addr);
+
+	return 0;
+}
+
+static int gfar_sysfs_multi_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, gfar_sysfs_multi_read, inode->i_private);
+}
+
+static const struct file_operations gfar_multi_fops = {
+	.owner = THIS_MODULE,
+	.open = gfar_sysfs_multi_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int gfar_init_fs(struct net_device *dev)
+{
+	struct gfar_private *priv = netdev_priv(dev);
+	struct dentry *dbgfs_filer;
+	struct dentry *dbgfs_nfc;
+	struct dentry *dbgfs_multi;
+
+	/* Create debugfs main directory if it doesn't exist yet */
+	if (!gfar_fs_dir) {
+		gfar_fs_dir = debugfs_create_dir("gianfar", NULL);
+
+		if (!gfar_fs_dir || IS_ERR(gfar_fs_dir)) {
+			pr_err("ERROR %s, debugfs create directory failed\n",
+					"gianfar");
+
+			return -ENOMEM;
+		}
+	}
+
+	/* Create per netdev entries */
+	priv->dbgfs_dir = debugfs_create_dir(dev->name, gfar_fs_dir);
+
+	if (!priv->dbgfs_dir || IS_ERR(priv->dbgfs_dir)) {
+		pr_err("ERROR %s, debugfs create directory failed\n",
+				dev->name);
+
+		return -ENOMEM;
+	}
+
+	dbgfs_filer = debugfs_create_file(
+			"filer", S_IRUGO, priv->dbgfs_dir, dev, &gfar_filer_fops);
+
+	if (!dbgfs_filer || IS_ERR(dbgfs_filer)) {
+		pr_info("ERROR creating gfar filer debugfs file\n");
+		debugfs_remove_recursive(priv->dbgfs_dir);
+
+		return -ENOMEM;
+	}
+
+	dbgfs_nfc = debugfs_create_file(
+			"nfc", S_IRUGO, priv->dbgfs_dir, dev, &gfar_nfc_fops);
+
+	if (!dbgfs_nfc || IS_ERR(dbgfs_nfc)) {
+		pr_info("ERROR creating gfar nfc debugfs file\n");
+		debugfs_remove_recursive(priv->dbgfs_dir);
+
+		return -ENOMEM;
+	}
+
+	dbgfs_multi = debugfs_create_file(
+			"multi", S_IRUGO, priv->dbgfs_dir, dev, &gfar_multi_fops);
+
+	if (!dbgfs_multi || IS_ERR(dbgfs_multi)) {
+		pr_info("ERROR creating gfar multi debugfs file\n");
+		debugfs_remove_recursive(priv->dbgfs_dir);
+
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void gfar_exit_fs(struct net_device *dev)
+{
+	struct gfar_private *priv = netdev_priv(dev);
+
+	debugfs_remove_recursive(priv->dbgfs_dir);
+}
+#endif /* CONFIG_DEBUG_FS */
+
 /* Called when something needs to use the ethernet device
  * Returns 0 for success.
  */
@@ -3089,6 +3410,13 @@ static int gfar_enet_open(struct net_device *dev)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	int err;
+
+#ifdef CONFIG_DEBUG_FS
+	err = gfar_init_fs(dev);
+	if (err < 0)
+	    netif_warn(priv, link, priv->ndev,
+		    "failed debugFS registration\n");
+#endif
 
 	err = init_phy(dev);
 	if (err)
@@ -3117,6 +3445,10 @@ static int gfar_close(struct net_device *dev)
 	phy_disconnect(dev->phydev);
 
 	gfar_free_irq(priv);
+
+#ifdef CONFIG_DEBUG_FS
+	gfar_exit_fs(dev);
+#endif
 
 	return 0;
 }

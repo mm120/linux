@@ -1090,6 +1090,10 @@ struct gfar_private {
 	struct net_device *ndev;
 	enum gfar_errata errata;
 
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *dbgfs_dir;
+#endif
+
 	u16 uses_rxfcb;
 	u16 padding;
 	u32 device_flags;
