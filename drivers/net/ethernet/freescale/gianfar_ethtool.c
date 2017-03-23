@@ -932,9 +932,12 @@ static int gfar_check_filer_hardware(struct gfar_private *priv)
 /* Write a mask to filer cache */
 static void gfar_set_mask(u32 mask, struct filer_table *tab)
 {
+	if (tab->last_mask == mask)
+		return;
 	tab->fe[tab->index].ctrl = RQFCR_AND | RQFCR_PID_MASK | RQFCR_CMP_EXACT;
 	tab->fe[tab->index].prop = mask;
 	tab->index++;
+	tab->last_mask = mask;
 }
 
 /* Sets parse bits (e.g. IP or TCP) */
@@ -1230,9 +1233,14 @@ static int gfar_convert_to_filer(const struct ethtool_rx_flow_spec *rule,
 	else
 		tab->fe[tab->index - 1].ctrl |= (rule->ring_cookie << 10);
 
+	/* Skip old_index past any initial MASK */
+	if (tab->index > old_index &&
+	    (tab->fe[old_index].ctrl & 0xf) == RQFCR_PID_MASK)
+		old_index++;
+
 	/* Only big enough entries can be clustered */
-	if (tab->index > (old_index + 2)) {
-		tab->fe[old_index + 1].ctrl |= RQFCR_CLE;
+	if (tab->index > (old_index + 1)) {
+		tab->fe[old_index].ctrl |= RQFCR_CLE;
 		tab->fe[tab->index - 1].ctrl |= RQFCR_CLE;
 	}
 
@@ -1297,6 +1305,9 @@ static int gfar_process_filer_changes(struct gfar_private *priv)
 	tab = kzalloc(sizeof(*tab), GFP_KERNEL);
 	if (tab == NULL)
 		return -ENOMEM;
+
+	/* The hardware starts of with a all-1's mask */
+	tab->last_mask = 0xffffffff;
 
 	/* Now convert the existing filer data from flow_spec into
 	 * filer tables binary format
