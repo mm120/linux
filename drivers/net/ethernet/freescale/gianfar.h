@@ -1323,6 +1323,7 @@ struct gfar_filer_entry {
 /* The 20 additional entries are a shadow for one extra element */
 struct filer_table {
 	u32 index;
+	u32 last_mask;
 	struct gfar_filer_entry fe[MAX_FILER_CACHE_IDX + 20];
 };
 
