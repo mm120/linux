@@ -79,12 +79,12 @@ extern const char gfar_driver_version[];
 
 /* These need to be powers of 2 for this driver */
 #define DEFAULT_TX_RING_SIZE	256
-#define DEFAULT_RX_RING_SIZE	256
+#define DEFAULT_RX_RING_SIZE	1024
 
 #define GFAR_RX_BUFF_ALLOC	16
 
-#define GFAR_RX_MAX_RING_SIZE   256
-#define GFAR_TX_MAX_RING_SIZE   256
+#define GFAR_RX_MAX_RING_SIZE   4096
+#define GFAR_TX_MAX_RING_SIZE   4096
 
 #define FBTHR_SHIFT        24
 #define DEFAULT_RX_LFC_THR  16
