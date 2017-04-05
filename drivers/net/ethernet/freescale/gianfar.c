@@ -2802,7 +2802,7 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 		}
 	}
 
-	if (!num_act_queues) {
+	/*if (!num_act_queues)*/ {
 		napi_complete_done(napi, work_done);
 
 		/* Clear the halt bit in RSTAT */
@@ -2906,8 +2906,11 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 		dev->stats.rx_over_errors++;
 		atomic64_inc(&priv->extra_stats.rx_bsy);
 
-		netif_dbg(priv, rx_err, dev, "busy error (rstat: %x)\n",
+		netif_err(priv, rx_err, dev, "busy error (rstat: %x)\n",
 			  gfar_read(&regs->rstat));
+
+		/* Clear the halt bit in RSTAT */
+		gfar_write(&regs->rstat, gfargrp->rstat);
 	}
 	if (events & IEVENT_BABR) {
 		dev->stats.rx_errors++;
