@@ -62,7 +62,7 @@ static const struct squashfs_decompressor squashfs_unknown_comp_ops = {
 	NULL, NULL, NULL, NULL, 0, "unknown", 0
 };
 
-static const struct squashfs_decompressor *decompressor[] = {
+static const struct squashfs_decompressor *const decompressor[] = {
 	&squashfs_zlib_comp_ops,
 	&squashfs_lz4_comp_ops,
 	&squashfs_lzo_comp_ops,
