@@ -48,6 +48,10 @@ extern struct ppc_emulated {
 	struct ppc_emulated_entry lxvd2x;
 	struct ppc_emulated_entry lxvb16x;
 #endif
+#ifdef CONFIG_SPE
+	struct ppc_emulated_entry fpe;
+	struct ppc_emulated_entry fpre;
+#endif
 } ppc_emulated;
 
 extern u32 ppc_warn_emulated;
