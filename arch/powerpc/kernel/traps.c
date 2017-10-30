@@ -2102,6 +2102,15 @@ void SPEFloatingPointException(struct pt_regs *regs)
 
 	flush_spe_to_thread(current);
 
+	PPC_WARN_EMULATED(fpe, regs);
+
+	if (ppc_warn_emulated) {
+		unsigned long speinsn;
+		get_user(speinsn, (unsigned int __user *) regs->nip);
+		pr_warn_ratelimited("%-10s %08lx: %08lx\n",
+				    current->comm, regs->nip, speinsn);
+	}
+
 	spefscr = current->thread.spefscr;
 	fpexc_mode = current->thread.fpexc_mode;
 
@@ -2153,6 +2162,8 @@ void SPEFloatingPointRoundException(struct pt_regs *regs)
 	if (regs->msr & MSR_SPE)
 		giveup_spe(current);
 	preempt_enable();
+
+	PPC_WARN_EMULATED(fpre, regs);
 
 	regs->nip -= 4;
 	err = speround_handler(regs);
@@ -2260,6 +2271,10 @@ struct ppc_emulated ppc_emulated = {
 	WARN_EMULATED_SETUP(lxvh8x),
 	WARN_EMULATED_SETUP(lxvd2x),
 	WARN_EMULATED_SETUP(lxvb16x),
+#endif
+#ifdef CONFIG_SPE
+	WARN_EMULATED_SETUP(fpe),
+	WARN_EMULATED_SETUP(fpre),
 #endif
 };
 
