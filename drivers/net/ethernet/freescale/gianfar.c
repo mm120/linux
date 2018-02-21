@@ -1551,56 +1551,47 @@ static noinline void gfar_update_link_state(struct gfar_private *priv)
 		return;
 
 	if (phydev->link) {
-		u32 tempval1 = gfar_read(&regs->maccfg1);
-		u32 tempval = gfar_read(&regs->maccfg2);
+		u32 maccfg1 = gfar_read(&regs->maccfg1);
+		u32 maccfg2 = gfar_read(&regs->maccfg2);
 		u32 ecntrl = gfar_read(&regs->ecntrl);
-		u32 tx_flow_oldval = (tempval1 & MACCFG1_TX_FLOW);
+		bool tx_flow_oldval = !!(maccfg1 & MACCFG1_TX_FLOW);
 
-		if (phydev->duplex != priv->oldduplex) {
-			if (!(phydev->duplex))
-				tempval &= ~(MACCFG2_FULL_DUPLEX);
-			else
-				tempval |= MACCFG2_FULL_DUPLEX;
+		if (!phydev->duplex)
+			maccfg2 &= ~MACCFG2_FULL_DUPLEX;
+		else
+			maccfg2 |= MACCFG2_FULL_DUPLEX;
+		priv->oldduplex = phydev->duplex;
 
-			priv->oldduplex = phydev->duplex;
-		}
-
-		if (phydev->speed != priv->oldspeed) {
-			switch (phydev->speed) {
+		maccfg2 &= ~MACCFG2_IF;
+		switch (phydev->speed) {
 			case 1000:
-				tempval =
-				    ((tempval & ~(MACCFG2_IF)) | MACCFG2_GMII);
-
-				ecntrl &= ~(ECNTRL_R100);
+				maccfg2 |= MACCFG2_GMII;
+				ecntrl &= ~ECNTRL_R100;
 				break;
-			case 100:
-			case 10:
-				tempval =
-				    ((tempval & ~(MACCFG2_IF)) | MACCFG2_MII);
-
 				/* Reduced mode distinguishes
 				 * between 10 and 100
 				 */
-				if (phydev->speed == SPEED_100)
-					ecntrl |= ECNTRL_R100;
-				else
-					ecntrl &= ~(ECNTRL_R100);
+			case 100:
+				maccfg2 |= MACCFG2_MII;
+				ecntrl |= ECNTRL_R100;
+				break;
+			case 10:
+				maccfg2 |= MACCFG2_MII;
+				ecntrl &= ~ECNTRL_R100;
 				break;
 			default:
 				netif_warn(priv, link, priv->ndev,
-					   "Ack!  Speed (%d) is not 10/100/1000!\n",
-					   phydev->speed);
+					"Ack!  Speed (%d) is not 10/100/1000!\n",
+					phydev->speed);
 				break;
-			}
-
-			priv->oldspeed = phydev->speed;
 		}
+		priv->oldspeed = phydev->speed;
 
-		tempval1 &= ~(MACCFG1_TX_FLOW | MACCFG1_RX_FLOW);
-		tempval1 |= gfar_get_flowctrl_cfg(priv);
+		maccfg1 &= ~(MACCFG1_TX_FLOW | MACCFG1_RX_FLOW);
+		maccfg1 |= gfar_get_flowctrl_cfg(priv);
 
 		/* Turn last free buffer recording on */
-		if ((tempval1 & MACCFG1_TX_FLOW) && !tx_flow_oldval) {
+		if ((maccfg1 & MACCFG1_TX_FLOW) && !tx_flow_oldval) {
 			for (i = 0; i < priv->num_rx_queues; i++) {
 				u32 bdp_dma;
 
@@ -1612,21 +1603,19 @@ static noinline void gfar_update_link_state(struct gfar_private *priv)
 			priv->tx_actual_en = 1;
 		}
 
-		if (unlikely(!(tempval1 & MACCFG1_TX_FLOW) && tx_flow_oldval))
+		if (unlikely(!(maccfg1 & MACCFG1_TX_FLOW) && tx_flow_oldval))
 			priv->tx_actual_en = 0;
 
-		gfar_write(&regs->maccfg1, tempval1);
-		gfar_write(&regs->maccfg2, tempval);
+		gfar_write(&regs->maccfg1, maccfg1);
+		gfar_write(&regs->maccfg2, maccfg2);
 		gfar_write(&regs->ecntrl, ecntrl);
 
-		if (!priv->oldlink)
-			priv->oldlink = 1;
-
-	} else if (priv->oldlink) {
-		priv->oldlink = 0;
+	} else {
 		priv->oldspeed = 0;
 		priv->oldduplex = -1;
 	}
+
+	priv->oldlink = phydev->link;
 
 	if (netif_msg_link(priv))
 		phy_print_status(phydev);
@@ -3743,7 +3732,6 @@ static int gfar_restore(struct device *dev)
 
 	if (ndev->phydev)
 		phy_start(ndev->phydev);
-
 	netif_device_attach(ndev);
 	enable_napi(priv);
 
