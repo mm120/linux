@@ -1207,6 +1207,18 @@ hc_init:
 	if (pdev->vendor == PCI_VENDOR_ID_INTEL)
 		usb_enable_intel_xhci_ports(pdev);
 
+	if (pdev->vendor == PCI_VENDOR_ID_RENESAS &&
+	    (pdev->device == PCI_DEVICE_ID_RENESAS_720201 ||
+	     pdev->device == PCI_DEVICE_ID_RENESAS_720202)) {
+		u32 f4;
+		if (pci_read_config_dword(pdev, 0xf4, &f4) == 0 &&
+		    (f4 & 0x70) >> 4 != 0x01) {
+			dev_warn(&pdev->dev,
+				 "Assuming Renesas 72020x has no firmware");
+			goto iounmap;
+		}
+	}
+
 	op_reg_base = base + XHCI_HC_LENGTH(readl(base));
 
 	/* Wait for the host controller to be ready before writing any
