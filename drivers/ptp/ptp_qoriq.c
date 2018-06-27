@@ -200,6 +200,22 @@ int ptp_qoriq_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 	struct ptp_qoriq *ptp_qoriq = container_of(ptp, struct ptp_qoriq, caps);
 	struct ptp_qoriq_registers *regs = &ptp_qoriq->regs;
 
+	/* If 'bypass' is true the only way to adjust the frequency is
+	 * with a callback supplied by another driver. */
+	if (ptp_qoriq->bypass) {
+		if (ptp_qoriq->ptp_adjfreq_func == 0) {
+			/* If 'bypass' is true and we have no callback, then
+			 * return an error. */
+			return -ENOSYS;
+		}
+		if (unlikely(ptp_qoriq->ptp_regs_dirty)) {
+			ptp_qoriq->write(&ptp_qoriq->regs.ctrl_regs->tmr_add, ptp_qoriq->tmr_add);
+			ptp_qoriq->ptp_regs_dirty = 0;
+		}
+		return ptp_qoriq->ptp_adjfreq_func(
+			ptp_qoriq->ptp_adjfreq_cookie, scaled_ppm);
+	}
+
 	if (scaled_ppm < 0) {
 		neg_adj = 1;
 		scaled_ppm = -scaled_ppm;
@@ -217,6 +233,7 @@ int ptp_qoriq_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 	tmr_add = neg_adj ? tmr_add - diff : tmr_add + diff;
 
 	ptp_qoriq->write(&regs->ctrl_regs->tmr_add, tmr_add);
+	ptp_qoriq->ptp_regs_dirty = 1;
 
 	return 0;
 }
@@ -344,6 +361,58 @@ static const struct ptp_clock_info ptp_qoriq_caps = {
 	.enable		= ptp_qoriq_enable,
 };
 
+int ptp_qoriq_register_adjfreq_callback(int (*adjfreq_func)(void *, long),
+	void *adjfreq_cookie)
+{
+	struct device_node *of_node;
+	struct platform_device *pdev;
+	struct ptp_qoriq *ptp_qoriq;
+
+	/*
+	 * This function is called from another driver, so we need to
+	 * search for the instance of the gianfar driver.
+	 */
+	of_node = of_find_compatible_node(NULL, NULL, "fsl,etsec-ptp");
+	if (of_node == NULL) {
+		pr_err("Cannot find of_node for '%s'\n", "fsl,etsec-ptp");
+		return -ENODEV;
+	}
+	pdev = of_find_device_by_node(of_node);
+	if (pdev == NULL) {
+		pr_err("Cannot find platform_device for '%s'\n",
+			"fsl,etsec-ptp");
+		return -ENODEV;
+	}
+
+	ptp_qoriq = platform_get_drvdata(pdev);
+	if (ptp_qoriq == NULL) {
+		pr_err("platform_device %s has NULL drvdata\n",
+			"fsl,etsec-ptp");
+		return -ENODEV;
+	}
+
+	/* We should prevent the ptp_qoriq module from being
+	 * unloaded while the other driver has a callback hooked. */
+	if (ptp_qoriq->ptp_adjfreq_func == NULL) {
+		if (adjfreq_func != NULL) {
+			if (!try_module_get(pdev->dev.driver->owner)) {
+				return -ENODEV;
+			}
+		}
+	} else {
+		if (adjfreq_func == NULL) {
+			module_put(pdev->dev.driver->owner);
+		}
+	}
+
+	ptp_qoriq->ptp_adjfreq_func = adjfreq_func;
+	ptp_qoriq->ptp_adjfreq_cookie = adjfreq_cookie;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ptp_qoriq_register_adjfreq_callback);
+
+
 /**
  * ptp_qoriq_nominal_freq - calculate nominal frequency according to
  *			    reference clock frequency
@@ -459,6 +528,7 @@ int ptp_qoriq_init(struct ptp_qoriq *ptp_qoriq, void __iomem *base,
 
 	ptp_qoriq->base = base;
 	ptp_qoriq->caps = *caps;
+	ptp_qoriq->ptp_regs_dirty = 1;
 
 	if (of_property_read_u32(node, "fsl,cksel", &ptp_qoriq->cksel))
 		ptp_qoriq->cksel = DEFAULT_CKSEL;
@@ -467,6 +537,8 @@ int ptp_qoriq_init(struct ptp_qoriq *ptp_qoriq, void __iomem *base,
 		ptp_qoriq->extts_fifo_support = true;
 	else
 		ptp_qoriq->extts_fifo_support = false;
+	if (of_property_read_u32(node, "fsl,bypass", &ptp_qoriq->bypass))
+		ptp_qoriq->bypass = 0;
 
 	if (of_property_read_u32(node,
 				 "fsl,tclk-period", &ptp_qoriq->tclk_period) ||
@@ -514,7 +586,8 @@ int ptp_qoriq_init(struct ptp_qoriq *ptp_qoriq, void __iomem *base,
 
 	tmr_ctrl =
 	  (ptp_qoriq->tclk_period & TCLK_PERIOD_MASK) << TCLK_PERIOD_SHIFT |
-	  (ptp_qoriq->cksel & CKSEL_MASK) << CKSEL_SHIFT;
+	  (ptp_qoriq->cksel & CKSEL_MASK) << CKSEL_SHIFT |
+	  (ptp_qoriq->bypass ? BYP : 0);
 
 	spin_lock_irqsave(&ptp_qoriq->lock, flags);
 
@@ -634,7 +707,7 @@ MODULE_DEVICE_TABLE(of, match_table);
 
 static struct platform_driver ptp_qoriq_driver = {
 	.driver = {
-		.name		= "ptp_qoriq",
+		.name		= DRIVER,
 		.of_match_table	= match_table,
 	},
 	.probe       = ptp_qoriq_probe,
