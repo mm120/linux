@@ -155,10 +155,14 @@ struct ptp_qoriq {
 	u32 tmr_prsc;
 	u32 tmr_add;
 	u32 cksel;
+	u32 bypass;
 	u32 tmr_fiper1;
 	u32 tmr_fiper2;
 	u32 (*read)(unsigned __iomem *addr);
 	void (*write)(unsigned __iomem *addr, u32 val);
+	int (*ptp_adjfreq_func)(void *, long);
+	void *ptp_adjfreq_cookie;
+	int ptp_regs_dirty;
 };
 
 static inline u32 qoriq_read_be(unsigned __iomem *addr)
