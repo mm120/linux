@@ -1031,7 +1031,7 @@ struct gfar_irqinfo {
  */
 
 struct gfar_priv_grp {
-	spinlock_t grplock __aligned(SMP_CACHE_BYTES);
+	raw_spinlock_t grplock __aligned(SMP_CACHE_BYTES);
 	struct	napi_struct napi_rx;
 	struct	napi_struct napi_tx;
 	struct gfar __iomem *regs;

@@ -399,6 +399,34 @@ static void gfar_ints_enable(struct gfar_private *priv)
 	}
 }
 
+static void gfar_int_enable_mask(struct gfar_priv_grp *grp, u32 mask)
+{
+	unsigned long flags;
+	u32 imask;
+
+	raw_spin_lock_irqsave(&grp->grplock, flags);
+
+	imask = gfar_read(&grp->regs->imask);
+	imask |= mask;
+	gfar_write(&grp->regs->imask, imask);
+
+	raw_spin_unlock_irqrestore(&grp->grplock, flags);
+}
+
+static void gfar_int_disable_mask(struct gfar_priv_grp *grp, u32 mask)
+{
+	unsigned long flags;
+	u32 imask;
+
+	raw_spin_lock_irqsave(&grp->grplock, flags);
+
+	imask = gfar_read(&grp->regs->imask);
+	imask &= ~mask;
+	gfar_write(&grp->regs->imask, imask);
+
+	raw_spin_unlock_irqrestore(&grp->grplock, flags);
+}
+
 static int gfar_alloc_tx_queues(struct gfar_private *priv)
 {
 	int i;
@@ -521,7 +549,7 @@ static int gfar_parse_group(struct device_node *np,
 	}
 
 	grp->priv = priv;
-	spin_lock_init(&grp->grplock);
+	raw_spin_lock_init(&grp->grplock);
 	if (priv->mode == MQ_MG_MODE) {
 		u32 rxq_mask, txq_mask;
 		int ret;
@@ -2337,8 +2365,7 @@ static void count_errors(u32 lstatus, struct net_device *ndev)
 static irqreturn_t gfar_receive(int irq, void *grp_id)
 {
 	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
-	unsigned long flags;
-	u32 imask, ievent;
+	u32 ievent;
 
 	ievent = gfar_read(&grp->regs->ievent);
 
@@ -2348,11 +2375,7 @@ static irqreturn_t gfar_receive(int irq, void *grp_id)
 	}
 
 	if (likely(napi_schedule_prep(&grp->napi_rx))) {
-		spin_lock_irqsave(&grp->grplock, flags);
-		imask = gfar_read(&grp->regs->imask);
-		imask &= IMASK_RX_DISABLED;
-		gfar_write(&grp->regs->imask, imask);
-		spin_unlock_irqrestore(&grp->grplock, flags);
+		gfar_int_disable_mask(grp, IMASK_RX_DEFAULT);
 		__napi_schedule(&grp->napi_rx);
 	} else {
 		/* Clear IEVENT, so interrupts aren't called again
@@ -2368,15 +2391,9 @@ static irqreturn_t gfar_receive(int irq, void *grp_id)
 static irqreturn_t gfar_transmit(int irq, void *grp_id)
 {
 	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
-	unsigned long flags;
-	u32 imask;
 
 	if (likely(napi_schedule_prep(&grp->napi_tx))) {
-		spin_lock_irqsave(&grp->grplock, flags);
-		imask = gfar_read(&grp->regs->imask);
-		imask &= IMASK_TX_DISABLED;
-		gfar_write(&grp->regs->imask, imask);
-		spin_unlock_irqrestore(&grp->grplock, flags);
+		gfar_int_disable_mask(grp, IMASK_TX_DEFAULT);
 		__napi_schedule(&grp->napi_tx);
 	} else {
 		/* Clear IEVENT, so interrupts aren't called again
@@ -2644,16 +2661,11 @@ static int gfar_poll_rx_sq(struct napi_struct *napi, int budget)
 	work_done = gfar_clean_rx_ring(rx_queue, budget);
 
 	if (work_done < budget) {
-		u32 imask;
 		napi_complete_done(napi, work_done);
 		/* Clear the halt bit in RSTAT */
 		gfar_write(&regs->rstat, gfargrp->rstat);
 
-		spin_lock_irq(&gfargrp->grplock);
-		imask = gfar_read(&regs->imask);
-		imask |= IMASK_RX_DEFAULT;
-		gfar_write(&regs->imask, imask);
-		spin_unlock_irq(&gfargrp->grplock);
+		gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
 	}
 
 	return work_done;
@@ -2665,7 +2677,6 @@ static int gfar_poll_tx_sq(struct napi_struct *napi, int budget)
 		container_of(napi, struct gfar_priv_grp, napi_tx);
 	struct gfar __iomem *regs = gfargrp->regs;
 	struct gfar_priv_tx_q *tx_queue = gfargrp->tx_queue;
-	u32 imask;
 
 	/* Clear IEVENT, so interrupts aren't called again
 	 * because of the packets that have already arrived
@@ -2678,11 +2689,7 @@ static int gfar_poll_tx_sq(struct napi_struct *napi, int budget)
 
 	napi_complete(napi);
 
-	spin_lock_irq(&gfargrp->grplock);
-	imask = gfar_read(&regs->imask);
-	imask |= IMASK_TX_DEFAULT;
-	gfar_write(&regs->imask, imask);
-	spin_unlock_irq(&gfargrp->grplock);
+	gfar_int_enable_mask(gfargrp, IMASK_TX_DEFAULT);
 
 	return 0;
 }
@@ -2733,17 +2740,12 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 	}
 
 	if (!num_act_queues) {
-		u32 imask;
 		napi_complete_done(napi, work_done);
 
 		/* Clear the halt bit in RSTAT */
 		gfar_write(&regs->rstat, gfargrp->rstat);
 
-		spin_lock_irq(&gfargrp->grplock);
-		imask = gfar_read(&regs->imask);
-		imask |= IMASK_RX_DEFAULT;
-		gfar_write(&regs->imask, imask);
-		spin_unlock_irq(&gfargrp->grplock);
+		gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
 	}
 
 	return work_done;
@@ -2774,16 +2776,11 @@ static int gfar_poll_tx(struct napi_struct *napi, int budget)
 	}
 
 	if (!has_tx_work) {
-		u32 imask;
 		napi_complete(napi);
 
 		trace_gianfar_poll_tx_complete(0);
 
-		spin_lock_irq(&gfargrp->grplock);
-		imask = gfar_read(&regs->imask);
-		imask |= IMASK_TX_DEFAULT;
-		gfar_write(&regs->imask, imask);
-		spin_unlock_irq(&gfargrp->grplock);
+		gfar_int_enable_mask(gfargrp, IMASK_TX_DEFAULT);
 	} else {
 		trace_gianfar_poll_tx_kick(has_tx_work, 0,
 			gfar_read(&regs->tstat));
