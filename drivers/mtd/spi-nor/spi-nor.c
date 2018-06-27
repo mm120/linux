@@ -2061,6 +2061,22 @@ static int spi_nor_spansion_clear_sr_bp(struct spi_nor *nor)
 		.page_size = 256,					\
 		.flags = (_flags),
 
+/* Used to set a custom (non 256) page_size */
+#define INFO6P(_jedec_id, _ext_id, _sector_size, _n_sectors, _pg_sz, _flags) \
+		.id = {							\
+			((_jedec_id) >> 16) & 0xff,			\
+			((_jedec_id) >> 8) & 0xff,			\
+			(_jedec_id) & 0xff,				\
+			((_ext_id) >> 16) & 0xff,			\
+			((_ext_id) >> 8) & 0xff,			\
+			(_ext_id) & 0xff,				\
+			},						\
+		.id_len = 6,                                            \
+		.sector_size = (_sector_size),				\
+		.n_sectors = (_n_sectors),				\
+		.page_size = (_pg_sz),					\
+		.flags = (_flags),					\
+
 #define CAT25_INFO(_sector_size, _n_sectors, _page_size, _addr_width, _flags)	\
 		.sector_size = (_sector_size),				\
 		.n_sectors = (_n_sectors),				\
@@ -2348,7 +2364,7 @@ static const struct flash_info spi_nor_ids[] = {
 			SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ | USE_CLSR) },
 	{ "s25fl256s0", INFO(0x010219, 0x4d00, 256 * 1024, 128, USE_CLSR) },
 	{ "s25fl256s1", INFO(0x010219, 0x4d01,  64 * 1024, 512, SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ | USE_CLSR) },
-	{ "s25fl512s",  INFO6(0x010220, 0x4d0080, 256 * 1024, 256,
+	{ "s25fl512s",  INFO6P(0x010220, 0x4d0080, 256 * 1024, 256, 512,
 			SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
 			SPI_NOR_HAS_LOCK | USE_CLSR) },
 	{ "s25fs512s",  INFO6(0x010220, 0x4d0081, 256 * 1024, 256, SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ | USE_CLSR) },
@@ -2874,7 +2890,6 @@ static int spi_nor_read_raw(struct spi_nor *nor, u32 addr, size_t len, u8 *buf)
 			return ret;
 		if (!ret || ret > len)
 			return -EIO;
-
 		buf += ret;
 		addr += ret;
 		len -= ret;
