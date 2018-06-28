@@ -1173,7 +1173,7 @@ static void quirk_usb_handoff_xhci(struct pci_dev *pdev)
 	/* Auto handoff never worked for these devices. Force it and continue */
 	if ((pdev->vendor == PCI_VENDOR_ID_TI && pdev->device == 0x8241) ||
 			(pdev->vendor == PCI_VENDOR_ID_RENESAS
-			 && pdev->device == 0x0014)) {
+			 && pdev->device == PCI_DEVICE_ID_RENESAS_720201)) {
 		val = (val | XHCI_HC_OS_OWNED) & ~XHCI_HC_BIOS_OWNED;
 		writel(val, base + ext_cap_offset);
 	}

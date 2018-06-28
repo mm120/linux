@@ -227,12 +227,12 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 		xhci->quirks |= XHCI_BROKEN_STREAMS;
 	}
 	if (pdev->vendor == PCI_VENDOR_ID_RENESAS &&
-	    pdev->device == 0x0014) {
+			pdev->device == PCI_DEVICE_ID_RENESAS_720201) {
 		xhci->quirks |= XHCI_TRUST_TX_LENGTH;
 		xhci->quirks |= XHCI_ZERO_64B_REGS;
 	}
 	if (pdev->vendor == PCI_VENDOR_ID_RENESAS &&
-	    pdev->device == 0x0015) {
+			pdev->device == PCI_DEVICE_ID_RENESAS_720202) {
 		xhci->quirks |= XHCI_RESET_ON_RESUME;
 		xhci->quirks |= XHCI_ZERO_64B_REGS;
 	}
