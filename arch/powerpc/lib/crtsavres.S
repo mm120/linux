@@ -42,7 +42,7 @@
 
 	.file	"crtsavres.S"
 
-#ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
+#if defined(CONFIG_CC_OPTIMIZE_FOR_SIZE) || defined(CONFIG_CRYPTO_AES)
 
 	.section ".text"
 
