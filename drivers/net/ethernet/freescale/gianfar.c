@@ -2642,6 +2642,19 @@ static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue,
 			continue;
 		}
 
+		/* DEBUG - I'm not sure why this is needed - when we
+		 * get BSY interrupts we seem to end up with short
+		 * SKB's that then crash in gfar_process_frame */
+		if (unlikely(skb_headlen(skb) < (priv->padding + (priv->uses_rxfcb ? GMAC_FCB_LEN : 0)))) {
+			/* discard faulty buffer */
+			dev_kfree_skb(skb);
+			skb = NULL;
+			rx_queue->stats.rx_dropped++;
+			continue;
+		}
+
+		gfar_process_frame(ndev, skb);
+
 		gfar_process_frame(ndev, skb);
 
 		/* Increment the number of packets */
@@ -2911,6 +2924,10 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 
 		/* Clear the halt bit in RSTAT */
 		gfar_write(&regs->rstat, gfargrp->rstat);
+
+		if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
+			__napi_schedule(&gfargrp->napi_rx);
+		}
 	}
 	if (events & IEVENT_BABR) {
 		dev->stats.rx_errors++;
