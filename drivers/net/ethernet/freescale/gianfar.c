@@ -2920,8 +2920,11 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 		netif_err(priv, rx_err, dev, "busy error (rstat: %x)\n",
 			  gfar_read(&regs->rstat));
 
-		/* Clear the halt bit in RSTAT */
-		gfar_write(&regs->rstat, gfargrp->rstat);
+		/*
+		 * We don't clear the halt bit in RSTAT, we have to
+		 * wait until the gfar_poll_rx function has
+		 * replenished the buffers.
+		 */
 
 		if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
 			__napi_schedule(&gfargrp->napi_rx);
