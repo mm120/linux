@@ -3353,12 +3353,53 @@ static const struct file_operations gfar_multi_fops = {
 	.release = single_release,
 };
 
+static int gfar_sysfs_rxbds_read(struct seq_file *seq, void *v)
+{
+	struct net_device *dev = seq->private;
+	const struct gfar_private *priv = netdev_priv(dev);
+	int j;
+
+	for (j = 0; j < 8; j += 1) {
+		struct gfar_priv_rx_q *rx_q = priv->rx_queue[j];
+		int i;
+		seq_printf(seq, "Q:%d next  clean:%u  use:%u  alloc:%u\n",
+			   j, rx_q->next_to_clean,
+			   rx_q->next_to_use,
+			   rx_q->next_to_alloc);
+		for (i = 0; i < rx_q->rx_ring_size; i++) {
+			seq_printf(seq, "[%3d] %08x %08x %08x  bd %08x %08x\n",
+				   i,
+				   rx_q->rx_buff[i].dma,
+				   rx_q->rx_buff[i].page,
+				   rx_q->rx_buff[i].page_offset,
+				   rx_q->rx_bd_base[i].lstatus,
+				   rx_q->rx_bd_base[i].bufPtr);
+		}
+	}
+
+	return 0;
+}
+
+static int gfar_sysfs_rxbds_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, gfar_sysfs_rxbds_read, inode->i_private);
+}
+
+static const struct file_operations gfar_rxbds_fops = {
+	.owner = THIS_MODULE,
+	.open = gfar_sysfs_rxbds_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static int gfar_init_fs(struct net_device *dev)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	struct dentry *dbgfs_filer;
 	struct dentry *dbgfs_nfc;
 	struct dentry *dbgfs_multi;
+	struct dentry *dbgfs_rxbds;
 
 	/* Create debugfs main directory if it doesn't exist yet */
 	if (!gfar_fs_dir) {
@@ -3407,6 +3448,16 @@ static int gfar_init_fs(struct net_device *dev)
 
 	if (!dbgfs_multi || IS_ERR(dbgfs_multi)) {
 		pr_info("ERROR creating gfar multi debugfs file\n");
+		debugfs_remove_recursive(priv->dbgfs_dir);
+
+		return -ENOMEM;
+	}
+
+	dbgfs_rxbds = debugfs_create_file(
+		"rxbds", S_IRUGO, priv->dbgfs_dir, dev, &gfar_rxbds_fops);
+
+	if (!dbgfs_rxbds || IS_ERR(dbgfs_rxbds)) {
+		pr_info("ERROR creating gfar rxbds debugfs file\n");
 		debugfs_remove_recursive(priv->dbgfs_dir);
 
 		return -ENOMEM;
@@ -4084,7 +4135,6 @@ static int gfar_resume(struct device *dev)
 
 	if (!netif_running(ndev))
 		return 0;
-
 	if (wol & GFAR_WOL_MAGIC) {
 		/* Disable Magic Packet mode */
 		tempval = gfar_read(&regs->maccfg2);
