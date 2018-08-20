@@ -2754,7 +2754,7 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 	/* Clear IEVENT, so interrupts aren't called again
 	 * because of the packets that have already arrived
 	 */
-	gfar_write(&regs->ievent, IEVENT_RX_MASK);
+//	gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
 	rstat_rxf = gfar_read(&regs->rstat) & RSTAT_RXF_MASK;
 	rstat_rxf = gfar_read(&regs->rstat);
@@ -2804,8 +2804,8 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 			 * window" much bigger.
 			 */
 			if (gfar_clean_rx_ring(rx_queue, 1)) {
-				work_done += 1;
 				gfargrp->extra_rstat |= RSTAT_CLEAR_RXF0 >> i;
+				trace_printk("extra_rstat = %08x\n", gfargrp->extra_rstat);
 			} else {
 				num_act_queues--;
 
@@ -2815,7 +2815,14 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 		}
 	}
 
-	/*if (!num_act_queues)*/ {
+	/*
+	 * If any bits are set in extra_rstat, we need NAPI to call us
+	 * again.
+	 */
+	if (gfargrp->extra_rstat)
+	    return budget;
+
+	if (work_done < budget) {
 		napi_complete_done(napi, work_done);
 
 		/* Clear the halt bit in RSTAT */
@@ -2823,13 +2830,6 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 
 		gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
 	}
-
-	/*
-	 * If any bits are set in extra_rstat, we need NAPI to call us
-	 * again.
-	 */
-	if (gfargrp->extra_rstat)
-	    return budget;
 
 	return work_done;
 }
@@ -3370,7 +3370,7 @@ static int gfar_sysfs_rxbds_read(struct seq_file *seq, void *v)
 			   rx_q->next_to_use,
 			   rx_q->next_to_alloc);
 		for (i = 0; i < rx_q->rx_ring_size; i++) {
-			seq_printf(seq, "[%3d] %08x %08x %08x  bd %08x %08x\n",
+			seq_printf(seq, "[%3d] %08x %p %08x  bd %08x %08x\n",
 				   i,
 				   rx_q->rx_buff[i].dma,
 				   rx_q->rx_buff[i].page,
@@ -3411,7 +3411,6 @@ static int gfar_init_fs(struct net_device *dev)
 		if (!gfar_fs_dir || IS_ERR(gfar_fs_dir)) {
 			pr_err("ERROR %s, debugfs create directory failed\n",
 					"gianfar");
-
 			return -ENOMEM;
 		}
 	}
