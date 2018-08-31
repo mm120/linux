@@ -53,7 +53,7 @@ struct ethtool_rx_list {
 };
 
 /* The maximum number of packets to be handled in one call of gfar_poll */
-#define GFAR_DEV_WEIGHT (64*1024)
+#define GFAR_DEV_WEIGHT 64
 
 /* Length for FCB */
 #define GMAC_FCB_LEN 8
@@ -1101,6 +1101,9 @@ struct gfar_private {
 	/* HW time stamping enabled flag */
 	int hwts_rx_en;
 	int hwts_tx_en;
+
+	bool non_napi_rx;
+	bool non_napi_tx;
 
 	struct gfar_priv_tx_q *tx_queue[MAX_TX_QS];
 	struct gfar_priv_rx_q *rx_queue[MAX_RX_QS];
