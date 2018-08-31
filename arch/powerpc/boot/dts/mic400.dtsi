@@ -145,12 +145,16 @@
 		phy-handle = <&phy1>;
 		tbi-handle = <&tbi0>;
 		phy-connection-type = "sgmii";
+		non-napi-rx;
+		non-napi-tx;
 	};
 
 	ethernet@b2000 {
 		phy-handle = <&phy2>;
 		tbi-handle = <&tbi1>;
 		phy-connection-type = "sgmii";
+		non-napi-rx;
+		non-napi-tx;
 	};
 
 	gpio: gpio-controller@fc00 {
