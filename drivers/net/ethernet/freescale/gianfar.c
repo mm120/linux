@@ -109,6 +109,8 @@
 
 const char gfar_driver_version[] = "2.0";
 
+static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit);
+
 MODULE_AUTHOR("Freescale Semiconductor, Inc");
 MODULE_DESCRIPTION("Gianfar Ethernet Driver");
 MODULE_LICENSE("GPL");
@@ -508,8 +510,10 @@ static void disable_napi(struct gfar_private *priv)
 	int i;
 
 	for (i = 0; i < priv->num_grps; i++) {
-		napi_disable(&priv->gfargrp[i].napi_rx);
-		napi_disable(&priv->gfargrp[i].napi_tx);
+		if (!priv->non_napi_rx)
+			napi_disable(&priv->gfargrp[i].napi_rx);
+		if (!priv->non_napi_tx)
+			napi_disable(&priv->gfargrp[i].napi_tx);
 	}
 }
 
@@ -518,8 +522,10 @@ static void enable_napi(struct gfar_private *priv)
 	int i;
 
 	for (i = 0; i < priv->num_grps; i++) {
-		napi_enable(&priv->gfargrp[i].napi_rx);
-		napi_enable(&priv->gfargrp[i].napi_tx);
+		if (!priv->non_napi_rx)
+			napi_enable(&priv->gfargrp[i].napi_rx);
+		if (!priv->non_napi_tx)
+			napi_enable(&priv->gfargrp[i].napi_tx);
 	}
 }
 
@@ -755,6 +761,18 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 	if (poll_mode == GFAR_MQ_POLLING)
 		priv->prio_sched_en = 1;
+
+	if (of_property_read_bool(np, "non-napi-rx")) {
+		priv->non_napi_rx = true;
+	} else {
+		priv->non_napi_rx = false;
+	}
+
+	if (of_property_read_bool(np, "non-napi-tx")) {
+		priv->non_napi_tx = true;
+	} else {
+		priv->non_napi_tx = false;
+	}
 
 	priv->num_tx_queues = num_tx_qs;
 	netif_set_real_num_rx_queues(dev, num_rx_qs);
@@ -2371,9 +2389,42 @@ static void count_errors(u32 lstatus, struct net_device *ndev)
 	}
 }
 
+static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
+{
+	struct gfar_private *priv = gfargrp->priv;
+	struct gfar __iomem *regs = gfargrp->regs;
+	struct gfar_priv_rx_q *rx_queue = NULL;
+	int i;
+	unsigned long rstat_rxf;
+
+	/* First, read rstat, to find out which Q's this interrupt was
+	 * for, clear those bots in rstat, and then clear IEVENT, so
+	 * that interrupts aren't called again because of the packets
+	 * that have already arrived.
+	 */
+	rstat_rxf = gfar_read(&regs->rstat);
+
+	gfar_write(&regs->rstat, rstat_rxf & RSTAT_RXF_MASK);
+
+	gfar_write(&regs->ievent, IEVENT_RX_MASK);
+
+	for (i = 0; i < 8; i++) {
+		if (!(gfargrp->rx_bit_map & (1u << i)))
+			continue;
+
+		/* skip queue if not active */
+		if (!(rstat_rxf & (RSTAT_CLEAR_RXF0 >> i)))
+			continue;
+
+		rx_queue = priv->rx_queue[i];
+		gfar_clean_rx_ring(rx_queue, 9999);
+	}
+}
+
 static irqreturn_t gfar_receive(int irq, void *grp_id)
 {
 	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
+	struct gfar_private *priv = grp->priv;
 	u32 ievent;
 
 	ievent = gfar_read(&grp->regs->ievent);
@@ -2383,27 +2434,35 @@ static irqreturn_t gfar_receive(int irq, void *grp_id)
 		return IRQ_HANDLED;
 	}
 
-	/* Clear IEVENT, so interrupts aren't called again
-	 * because of the packets that have already arrived.
-	 */
-	gfar_write(&grp->regs->ievent, IEVENT_RX_MASK);
+	if (priv->non_napi_rx) {
+		gfar_poll_rx_irq(grp);
+	} else {
+		if (likely(napi_schedule_prep(&grp->napi_rx))) {
+			gfar_int_disable_mask(grp, IMASK_RX_DEFAULT);
 
-	if (likely(napi_schedule_prep(&grp->napi_rx))) {
-		gfar_int_disable_mask(grp, IMASK_RX_DEFAULT);
-		__napi_schedule(&grp->napi_rx);
+			__napi_schedule(&grp->napi_rx);
+		} else {
+
+			/* Clear IEVENT, so interrupts aren't called again
+			 * because of the packets that have already arrived.
+			 */
+			gfar_write(&grp->regs->ievent, IEVENT_RX_MASK);
+		}
 	}
 
 	return IRQ_HANDLED;
 }
 
-static void gfar_poll_tx_coal(struct gfar_priv_grp *gfargrp)
+static void gfar_poll_tx_irq(struct gfar_priv_grp *gfargrp)
 {
 	struct gfar_private *priv = gfargrp->priv;
 	struct gfar __iomem *regs = gfargrp->regs;
 	struct gfar_priv_tx_q *tx_queue = NULL;
 	int i;
 
-	for_each_set_bit(i, &gfargrp->tx_bit_map, priv->num_tx_queues) {
+	for (i = 0; i < 8; i++) {
+		if (!(gfargrp->tx_bit_map & (1u << i)))
+			continue;
 		tx_queue = priv->tx_queue[i];
 		/* run Tx cleanup to completion */
 		if (tx_queue->tx_skbuff[tx_queue->skb_dirtytx]) {
@@ -2418,21 +2477,27 @@ static void gfar_poll_tx_coal(struct gfar_priv_grp *gfargrp)
 static irqreturn_t gfar_transmit(int irq, void *grp_id)
 {
 	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
+	struct gfar_private *priv = grp->priv;
 
-	/* Clear IEVENT, so interrupts aren't called again
-	 * because of the packets that have already arrived.
-	 */
-	gfar_write(&grp->regs->ievent, IEVENT_TX_MASK);
+	if (priv->non_napi_tx) {
+		/* Clear IEVENT, so interrupts aren't called again
+		 * because of the packets that have already arrived.
+		 */
+		gfar_write(&grp->regs->ievent, IEVENT_TX_MASK);
 
-#if 0
-	if (likely(napi_schedule_prep(&grp->napi_tx))) {
-		gfar_int_disable_mask(grp, IMASK_TX_DEFAULT);
+		gfar_poll_tx_irq(grp);
+	} else {
+		if (likely(napi_schedule_prep(&grp->napi_tx))) {
+			gfar_int_disable_mask(grp, IMASK_TX_DEFAULT);
 
-		__napi_schedule(&grp->napi_tx);
+			__napi_schedule(&grp->napi_tx);
+		}
+
+		/* Clear IEVENT, so interrupts aren't called again
+		 * because of the packets that have already arrived.
+		 */
+		gfar_write(&grp->regs->ievent, IEVENT_TX_MASK);
 	}
-#else
-	gfar_poll_tx_coal(grp);
-#endif
 
 	return IRQ_HANDLED;
 }
@@ -2666,7 +2731,11 @@ static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue,
 		skb->protocol = eth_type_trans(skb, ndev);
 
 		/* Send the packet up the stack */
-		napi_gro_receive(&rx_queue->grp->napi_rx, skb);
+		if (priv->non_napi_rx) {
+			netif_receive_skb(skb);
+		} else {
+			napi_gro_receive(&rx_queue->grp->napi_rx, skb);
+		}
 
 		skb = NULL;
 	}
@@ -2754,15 +2823,9 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 	/* Clear IEVENT, so interrupts aren't called again
 	 * because of the packets that have already arrived
 	 */
-//	gfar_write(&regs->ievent, IEVENT_RX_MASK);
+	gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
 	rstat_rxf = gfar_read(&regs->rstat) & RSTAT_RXF_MASK;
-	rstat_rxf = gfar_read(&regs->rstat);
-
-	rstat_rxf |= gfargrp->extra_rstat;
-	gfargrp->extra_rstat = 0;
-
-	rstat_rxf &= RSTAT_RXF_MASK;
 
 	num_act_queues = bitmap_weight(&rstat_rxf, MAX_RX_QS);
 	if (num_act_queues)
@@ -2783,46 +2846,14 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 			/* clear active queue hw indication */
 			gfar_write(&regs->rstat,
 				   RSTAT_CLEAR_RXF0 >> i);
-			/*
-			 * There's a race between checking the ring
-			 * (in gfar_clean_rx_ring) and clearing the
-			 * rstat:RXFn bit.  If the ring gets new
-			 * packets between the clean_rx_ring call and
-			 * the write above, we will stop the RX path.
-			 *
-			 * The solution is to check the ring again, if
-			 * there are any new packets in it we don't
-			 * reduce the number of active queues.  We
-			 * also have to save the fact that the
-			 * rstat:RXFn bit is now (possibly) lying to
-			 * us.
-			 *
-			 * This bug was only exposed after the changes
-			 * to the RX buffer management were made.  We
-			 * now allocate a bunch of buffers at the end
-			 * of clean_rx_ring, which makes the "race
-			 * window" much bigger.
-			 */
-			if (gfar_clean_rx_ring(rx_queue, 1)) {
-				gfargrp->extra_rstat |= RSTAT_CLEAR_RXF0 >> i;
-				trace_printk("extra_rstat = %08x\n", gfargrp->extra_rstat);
-			} else {
 				num_act_queues--;
 
 				if (!num_act_queues)
 					break;
-			}
 		}
 	}
 
-	/*
-	 * If any bits are set in extra_rstat, we need NAPI to call us
-	 * again.
-	 */
-	if (gfargrp->extra_rstat)
-	    return budget;
-
-	if (work_done < budget) {
+	if (!num_act_queues) {
 		napi_complete_done(napi, work_done);
 
 		/* Clear the halt bit in RSTAT */
@@ -2927,9 +2958,12 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 		 * wait until the gfar_poll_rx function has
 		 * replenished the buffers.
 		 */
-
-		if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
-			__napi_schedule(&gfargrp->napi_rx);
+		if (priv->non_napi_rx) {
+			gfar_poll_rx_irq(gfargrp);
+		} else {
+			if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
+				__napi_schedule(&gfargrp->napi_rx);
+			}
 		}
 	}
 	if (events & IEVENT_BABR) {
@@ -3822,15 +3856,19 @@ static int gfar_probe(struct platform_device *ofdev)
 	/* Register for napi ...We are registering NAPI for each grp */
 	for (i = 0; i < priv->num_grps; i++) {
 		if (priv->poll_mode == GFAR_SQ_POLLING) {
-			netif_napi_add(dev, &priv->gfargrp[i].napi_rx,
-				       gfar_poll_rx_sq, GFAR_DEV_WEIGHT);
-			netif_tx_napi_add(dev, &priv->gfargrp[i].napi_tx,
-				       gfar_poll_tx_sq, 2);
+			if (!priv->non_napi_rx)
+			    netif_napi_add(dev, &priv->gfargrp[i].napi_rx,
+				    gfar_poll_rx_sq, GFAR_DEV_WEIGHT);
+			if (!priv->non_napi_tx)
+			    netif_tx_napi_add(dev, &priv->gfargrp[i].napi_tx,
+				    gfar_poll_tx_sq, 2);
 		} else {
+		    if (!priv->non_napi_rx)
 			netif_napi_add(dev, &priv->gfargrp[i].napi_rx,
-				       gfar_poll_rx, GFAR_DEV_WEIGHT);
+				gfar_poll_rx, GFAR_DEV_WEIGHT);
+		    if (!priv->non_napi_tx)
 			netif_tx_napi_add(dev, &priv->gfargrp[i].napi_tx,
-				       gfar_poll_tx, 2);
+				gfar_poll_tx, 2);
 		}
 	}
 
@@ -3911,12 +3949,21 @@ static int gfar_probe(struct platform_device *ofdev)
 	for (i = 0; i < priv->num_grps; i++) {
 		struct gfar_priv_grp *grp = &priv->gfargrp[i];
 		if (priv->device_flags & FSL_GIANFAR_DEV_HAS_MULTI_INTR) {
+		    if (priv->num_grps) {
 			sprintf(gfar_irq(grp, TX)->name, "%s%s%c%s",
 				dev->name, "_g", '0' + i, "_tx");
 			sprintf(gfar_irq(grp, RX)->name, "%s%s%c%s",
 				dev->name, "_g", '0' + i, "_rx");
 			sprintf(gfar_irq(grp, ER)->name, "%s%s%c%s",
 				dev->name, "_g", '0' + i, "_er");
+		    } else {
+			sprintf(gfar_irq(grp, TX)->name, "%s%s",
+				dev->name, "_tx");
+			sprintf(gfar_irq(grp, RX)->name, "%s%s",
+				dev->name, "_rx");
+			sprintf(gfar_irq(grp, ER)->name, "%s%s",
+				dev->name, "_er");
+		    }
 		} else
 			strcpy(gfar_irq(grp, TX)->name, dev->name);
 	}
@@ -3930,7 +3977,9 @@ static int gfar_probe(struct platform_device *ofdev)
 	/* Even more device info helps when determining which kernel
 	 * provided which set of benchmarks.
 	 */
-	netdev_info(dev, "Running with NAPI enabled\n");
+	netdev_info(dev, "Running with RX-NAPI %s, TX-NAPI %s\n",
+		priv->non_napi_rx ? "disabled" : "enabled",
+		priv->non_napi_tx ? "disabled" : "enabled");
 	for (i = 0; i < priv->num_rx_queues; i++)
 		netdev_info(dev, "RX BD ring size for Q[%d]: %d\n",
 			    i, priv->rx_queue[i]->rx_ring_size);
