@@ -29,6 +29,7 @@
 #include <linux/completion.h>
 #include <linux/pm_runtime.h>
 #include <linux/random.h>
+#include <asm/unaligned.h>
 
 #include "bmp280.h"
 
@@ -142,12 +143,17 @@ static const struct iio_chan_spec bmp280_channels[] = {
 	},
 };
 
+static inline u32 __get_unaligned_be24(const u8 *p)
+{
+        return p[0] << 16 | p[1] << 8 | p[2];
+}
+
 static int bmp280_read_calib(struct bmp280_data *data,
 			     struct bmp280_calib *calib,
 			     unsigned int chip)
 {
 	int ret;
-	unsigned int tmp;
+	u8 tmp[2];
 	struct device *dev = data->dev;
 	__le16 t_buf[BMP280_COMP_TEMP_REG_COUNT / 2];
 	__le16 p_buf[BMP280_COMP_PRESS_REG_COUNT / 2];
@@ -200,48 +206,47 @@ static int bmp280_read_calib(struct bmp280_data *data,
 	if (chip != BME280_CHIP_ID)
 		return 0;
 
-	ret = regmap_read(data->regmap, BMP280_REG_COMP_H1, &tmp);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H1, tmp, 1);
 	if (ret < 0) {
 		dev_err(dev, "failed to read H1 comp value\n");
 		return ret;
 	}
-	calib->H1 = tmp;
+	calib->H1 = tmp[0];
 
-	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H2, &tmp, 2);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H2, tmp, 2);
 	if (ret < 0) {
 		dev_err(dev, "failed to read H2 comp value\n");
 		return ret;
 	}
-	calib->H2 = sign_extend32(le16_to_cpu(tmp), 15);
+	calib->H2 = sign_extend32(tmp[0] | ((u16)tmp[1] << 8), 15);
 
-	ret = regmap_read(data->regmap, BMP280_REG_COMP_H3, &tmp);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H3, tmp, 1);
 	if (ret < 0) {
 		dev_err(dev, "failed to read H3 comp value\n");
 		return ret;
 	}
-	calib->H3 = tmp;
+	calib->H3 = tmp[0];
 
-	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H4, &tmp, 2);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H4, tmp, 2);
 	if (ret < 0) {
 		dev_err(dev, "failed to read H4 comp value\n");
 		return ret;
 	}
-	calib->H4 = sign_extend32(((be16_to_cpu(tmp) >> 4) & 0xff0) |
-				  (be16_to_cpu(tmp) & 0xf), 11);
+	calib->H4 = sign_extend32(((u16)tmp[0] << 4) | (tmp[1] & 0xf), 11);
 
-	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H5, &tmp, 2);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H5, tmp, 2);
 	if (ret < 0) {
 		dev_err(dev, "failed to read H5 comp value\n");
 		return ret;
 	}
-	calib->H5 = sign_extend32(((le16_to_cpu(tmp) >> 4) & 0xfff), 11);
+	calib->H5 = sign_extend32(((u16)tmp[1] << 4) | ((tmp[0] >> 4) & 0xf), 11);
 
-	ret = regmap_read(data->regmap, BMP280_REG_COMP_H6, &tmp);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_H6, tmp, 1);
 	if (ret < 0) {
 		dev_err(dev, "failed to read H6 comp value\n");
 		return ret;
 	}
-	calib->H6 = sign_extend32(tmp, 7);
+	calib->H6 = sign_extend32(tmp[0], 7);
 
 	return 0;
 }
@@ -327,17 +332,16 @@ static int bmp280_read_temp(struct bmp280_data *data,
 			    int *val)
 {
 	int ret;
-	__be32 tmp = 0;
+	u8 tmp[3];
 	s32 adc_temp, comp_temp;
 
-	ret = regmap_bulk_read(data->regmap, BMP280_REG_TEMP_MSB,
-			       (u8 *) &tmp, 3);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_TEMP_MSB, tmp, 3);
 	if (ret < 0) {
 		dev_err(data->dev, "failed to read temperature\n");
 		return ret;
 	}
 
-	adc_temp = be32_to_cpu(tmp) >> 12;
+	adc_temp = __get_unaligned_be24(tmp) >> 4;
 	if (adc_temp == BMP280_TEMP_SKIPPED) {
 		/* reading was skipped */
 		dev_err(data->dev, "reading temperature skipped\n");
@@ -361,7 +365,7 @@ static int bmp280_read_press(struct bmp280_data *data,
 			     int *val, int *val2)
 {
 	int ret;
-	__be32 tmp = 0;
+	u8 tmp[3];
 	s32 adc_press;
 	u32 comp_press;
 
@@ -370,14 +374,13 @@ static int bmp280_read_press(struct bmp280_data *data,
 	if (ret < 0)
 		return ret;
 
-	ret = regmap_bulk_read(data->regmap, BMP280_REG_PRESS_MSB,
-			       (u8 *) &tmp, 3);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_PRESS_MSB, tmp, 3);
 	if (ret < 0) {
 		dev_err(data->dev, "failed to read pressure\n");
 		return ret;
 	}
 
-	adc_press = be32_to_cpu(tmp) >> 12;
+	adc_press = __get_unaligned_be24(tmp) >> 4;
 	if (adc_press == BMP280_PRESS_SKIPPED) {
 		/* reading was skipped */
 		dev_err(data->dev, "reading pressure skipped\n");
@@ -394,7 +397,7 @@ static int bmp280_read_press(struct bmp280_data *data,
 static int bmp280_read_humid(struct bmp280_data *data, int *val, int *val2)
 {
 	int ret;
-	__be16 tmp = 0;
+	u8 tmp[2];
 	s32 adc_humidity;
 	u32 comp_humidity;
 
@@ -403,14 +406,13 @@ static int bmp280_read_humid(struct bmp280_data *data, int *val, int *val2)
 	if (ret < 0)
 		return ret;
 
-	ret = regmap_bulk_read(data->regmap, BMP280_REG_HUMIDITY_MSB,
-			       (u8 *) &tmp, 2);
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_HUMIDITY_MSB, tmp, 2);
 	if (ret < 0) {
 		dev_err(data->dev, "failed to read humidity\n");
 		return ret;
 	}
 
-	adc_humidity = be16_to_cpu(tmp);
+	adc_humidity = get_unaligned_be16(tmp);
 	if (adc_humidity == BMP280_HUMIDITY_SKIPPED) {
 		/* reading was skipped */
 		dev_err(data->dev, "reading humidity skipped\n");
@@ -746,17 +748,17 @@ static int bmp180_measure(struct bmp280_data *data, u8 ctrl_meas)
 static int bmp180_read_adc_temp(struct bmp280_data *data, int *val)
 {
 	int ret;
-	__be16 tmp = 0;
+	u8 tmp[2];
 
 	ret = bmp180_measure(data, BMP180_MEAS_TEMP);
 	if (ret)
 		return ret;
 
-	ret = regmap_bulk_read(data->regmap, BMP180_REG_OUT_MSB, (u8 *)&tmp, 2);
+	ret = regmap_bulk_read(data->regmap, BMP180_REG_OUT_MSB, tmp, 2);
 	if (ret)
 		return ret;
 
-	*val = be16_to_cpu(tmp);
+	*val = get_unaligned_be16(tmp);
 
 	return 0;
 }
@@ -842,18 +844,18 @@ static int bmp180_read_temp(struct bmp280_data *data, int *val)
 static int bmp180_read_adc_press(struct bmp280_data *data, int *val)
 {
 	int ret;
-	__be32 tmp = 0;
+	u8 tmp[3];
 	u8 oss = data->oversampling_press;
 
 	ret = bmp180_measure(data, BMP180_MEAS_PRESS_X(oss));
 	if (ret)
 		return ret;
 
-	ret = regmap_bulk_read(data->regmap, BMP180_REG_OUT_MSB, (u8 *)&tmp, 3);
+	ret = regmap_bulk_read(data->regmap, BMP180_REG_OUT_MSB, tmp, 3);
 	if (ret)
 		return ret;
 
-	*val = (be32_to_cpu(tmp) >> 8) >> (8 - oss);
+	*val = __get_unaligned_be24(tmp) >> (8 - oss);
 
 	return 0;
 }
