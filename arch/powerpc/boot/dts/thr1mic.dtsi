@@ -1,0 +1,292 @@
+
+&board_ifc {
+
+	ifc_nand: nand@1,0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "fsl,ifc-nand";
+		reg = <0x1 0x0 0x10000>;
+	};
+};
+
+&board_soc {
+
+	i2c@3000 {
+		/* ETH, PoE */
+		poe@28 {
+			compatible = "linear,ltc4266";
+			reg = <0x28>;
+		};
+		/* Only on ETH, revision 2 */
+		buttons@20 {
+			compatible = "nxp,pca9554";
+			reg = <0x20>;
+		};
+		/* Only on ETH, revision 2 */
+		leds@25 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "ti,tlc59108";
+			reg = <0x25>;
+
+			ledA_r@0 {
+				label = "status:a:red";
+				reg = <0x0>;
+			};
+			ledA_g@1 {
+				label = "status:a:green";
+				reg = <0x1>;
+			};
+			ledA_b@2 {
+				label = "status:a:blue";
+				reg = <0x2>;
+			};
+			ledB_r@3 {
+				label = "status:b:red";
+				reg = <0x3>;
+			};
+			ledB_g@4 {
+				label = "status:b:green";
+				reg = <0x4>;
+			};
+			ledB_b@5 {
+				label = "status:b:blue";
+				reg = <0x5>;
+			};
+		};
+		/* CPU, FRAM - maybe this will be removed? */
+		cfgmem@52 {
+			compatible = "24c64";
+			reg = <0x52>;
+			pagesize = <0x8000>;
+		};
+		/* ETH, E2PROM */
+		cfgmem@53 {
+			compatible = "24c128";
+			reg = <0x53>;
+			pagesize = <0x40>;
+		};
+		/* ETH, RTC */
+		rtc@68 {
+			compatible = "dallas,ds1307";
+			reg = <0x68>;
+		};
+		/* CPU, ClockGen */
+		clock_gen@6e {
+			compatible = "ics9fg104d";
+			reg = <0x6e>;
+		};
+	};
+
+	i2c@3100 {
+		/* DSI, PoE */
+		poe@29 {
+			compatible = "linear,ltc4266";
+			reg = <0x29>;
+		};
+		/* DSI, E2PROM */
+		cfgmem@50 {
+			compatible = "24c128";
+			reg = <0x50>;
+			pagesize = <0x40>;
+		};
+		/* BCK, 0x56 E2PROM? */
+		/* FAN, 0x76 Env. sensor? */
+	};
+
+	spi@7000 {
+
+		omic,cs-gpios = <&gpio 0 0   /* SPI_A0 */
+				 &gpio 5 0>; /* SPI_A1 */
+
+		flash@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "spansion,s25fl512s";
+			reg = <0>;
+			omic,reg = <0>;
+			omic,gpio-val = <1 1>;
+			spi-max-frequency = <15000000>;
+
+			/* These should match the values from U-boot */
+			partition@0000000 { reg = <0x0000000 0x00C0000>; label = "U-Boot Image"; read-only; };
+			partition@00C0000 { reg = <0x00C0000 0x0040000>; label = "U-Boot Environment"; read-only; };
+			partition@0100000 { reg = <0x0100000 0x0F00000>; label = "Rescue Linux Kernel"; };
+			partition@1000000 { reg = <0x1000000 0x0040000>; label = "Calibration File System"; };
+			partition@1040000 { reg = <0x1040000 0x04C0000>; label = "Resistant File System"; };
+		};
+
+		tpm@1 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "infineon,slb9670";
+			reg = <1>;
+			omic,reg = <0>;
+			omic,gpio-val = <1 0>;
+			spi-max-frequency = <15000000>;
+			interrupt-parent = <&mpic>;
+			interrupts = <10 1 0 0>;
+		};
+	};
+
+	sata@18000 {
+		status = "disabled";
+	};
+
+	sata@19000 {
+		status = "disabled";
+	};
+
+	can0: can@1c000 {
+		status = "disabled";
+	};
+
+	can1: can@1d000 {
+		status = "disabled";
+	};
+
+	usb@22000 {
+		dr_mode = "peripheral";
+		phy_type = "utmi";
+	};
+
+	mdio@24000 {
+		phy0: ethernet-phy@0 {
+			reg = <0x9>;
+		};
+
+		phy1: ethernet-phy@1 {
+			reg = <0x4>;
+		};
+
+		phy2: ethernet-phy@2 {
+			reg = <0x5>;
+		};
+
+		tbi0: tbi-phy@31 {
+			reg = <0x1f>;
+			device_type = "tbi-phy";
+		};
+	};
+
+	mdio@25000 {
+		tbi1: tbi-phy@31 {
+			reg = <0x1f>;
+			device_type = "tbi-phy";
+		};
+	};
+
+	mdio@26000 {
+		tbi2: tbi-phy@31 {
+			reg = <0x1f>;
+			device_type = "tbi-phy";
+		};
+	};
+
+	sdhc@2e000 {
+		status = "disabled";
+	};
+
+	crypto@30000 {
+		status = "disabled";
+	};
+
+	/*
+	 * TimerOsc     = system clock			MHz
+	 * tclk_period  = desired clock period		nanoseconds
+	 * NominalFreq  = 1000 / tclk_period		MHz
+	 * FreqDivRatio = TimerOsc / NominalFreq	(must be greater that 1.0)
+	 * tmr_add      = ceil(2^32 / FreqDivRatio)
+	 * OutputClock  = NominalFreq / tmr_prsc	MHz
+	 * PulseWidth   = 1 / OutputClock		microseconds
+	 * FiperFreq1   = desired frequency in Hz
+	 * FiperDiv1    = 1000000 * OutputClock / FiperFreq1
+	 * tmr_fiper1   = tclk_period * (tmr_prsc * FiperDiv1 - 1)
+	 * max_adj      = 1000000000 * (FreqDivRatio - 1.0) - 1
+	 */
+
+	/* 3 usec pulse */
+
+        ptp_clock@b0e00 {
+		compatible = "fsl,etsec-ptp";
+		reg = <0xb0e00 0xb0>;
+		interrupts = <68 2 0 0 69 2 0 0 70 2 0 0>;
+		fsl,tclk-period = <8>;
+		fsl,tmr-prsc =	 <500>;
+		fsl,tmr-add =	 <0x66666667>;
+		fsl,tmr-fiper1 = <999999992>;
+		fsl,tmr-fiper2 = <999999992>;
+		fsl,max-adj =	 <0x59682EFF>;
+		fsl,cksel =      <0x00>;
+                fsl,bypass =     <1>;
+	};
+
+	ethernet@b0000 {
+		phy-handle = <&phy0>;
+		tbi-handle = <&tbi0>;
+		phy-connection-type = "sgmii";
+		non-napi-rx;
+		non-napi-tx;
+	};
+
+	ethernet@b1000 {
+		phy-handle = <&phy1>;
+		tbi-handle = <&tbi1>;
+		phy-connection-type = "sgmii";
+		non-napi-rx;
+		non-napi-tx;
+	};
+
+	ethernet@b2000 {
+		phy-handle = <&phy2>;
+		tbi-handle = <&tbi2>;
+		phy-connection-type = "sgmii";
+		non-napi-rx;
+		non-napi-tx;
+	};
+
+	gpio: gpio-controller@fc00 {
+	};
+
+	leds {
+		compatible = "gpio-leds";
+//		LED-A {
+//			/* LED D7, on the edge of the board. */
+//			gpios = <&gpio 5 1>;
+//			default-state = "keep";
+//		};
+	};
+
+	mic-pwr-fail {
+		compatible = "mic-pwr-fail", "maio-pwr-fail";
+		interrupt-parent = <&mpic>;
+		interrupts = <0 0 0 0>;
+	};
+
+	mic-pwr-fail-filtered {
+		compatible = "mic-pwr-fail", "maio-pwr-fail";
+		interrupt-parent = <&mpic>;
+		interrupts = <1 0 0 0>;
+	};
+
+	pps-irq {
+		compatible = "pps-irq";
+		interrupt-parent = <&mpic>;
+		/* the following line  means:
+		   it's interrupt pin IRQ2
+		   it's low to high triggered
+		   see also Documentation/devicetree/bindings/powerpc/fsl/mpic.txt
+		*/
+		interrupts = <2 0 0 0>;
+	};
+};
+
+/ {
+	aliases {
+		/delete-property/ can0;
+		/delete-property/ can1;
+		ethernet0 = &enet0;
+		ethernet1 = &enet1;
+		ethernet2 = &enet2;
+	};
+};

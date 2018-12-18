@@ -8,3 +8,5 @@ mic400-rst-boot.dts
 mic400-rst-large.dts
 mic400-swt-boot.dts
 mic400-swt-large.dts
+thr1mic-boot.dts
+thr1mic-large.dts

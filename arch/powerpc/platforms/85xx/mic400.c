@@ -131,6 +131,8 @@ static int __init mic400_probe(void)
 
 	if (of_flat_dt_is_compatible(root, "omicron,mic400"))
 		return 1;
+	if (of_flat_dt_is_compatible(root, "omicron,thr1mic"))
+		return 1;
 	return 0;
 }
 
