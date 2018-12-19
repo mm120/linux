@@ -18,6 +18,8 @@
 #include <linux/spi/spi.h>
 #include <linux/pm_runtime.h>
 #include <sysdev/fsl_soc.h>
+#include <linux/gpio/consumer.h>
+#include <linux/bitops.h>
 
 /* eSPI Controller registers */
 #define ESPI_SPMODE	0x00	/* eSPI mode register */
@@ -87,6 +89,14 @@
 
 #define AUTOSUSPEND_TIMEOUT 2000
 
+#define MAX_CS_GPIOS     8
+
+struct fsl_espi_cs {
+	u32 real_chip_select;
+	u32 hw_mode;
+	DECLARE_BITMAP(gpio_vals, MAX_CS_GPIOS);
+};
+
 struct fsl_espi {
 	struct device *dev;
 	void __iomem *reg_base;
@@ -107,10 +117,11 @@ struct fsl_espi {
 	u32 spibrg;             /* SPIBRG input clock */
 
 	struct completion done;
-};
 
-struct fsl_espi_cs {
-	u32 hw_mode;
+	struct gpio_descs *gpio_descs;
+
+	/* This must be last.  Dynamically sized array. */
+	struct fsl_espi_cs cs_map[1];
 };
 
 static inline u32 fsl_espi_read_reg(struct fsl_espi *espi, int offset)
@@ -343,6 +354,14 @@ static void fsl_espi_setup_transfer(struct spi_device *spi,
 
 	cs->hw_mode |= CSMODE_PM(pm);
 
+	/* If we need to setup GPIOs, do it now */
+	if (espi->gpio_descs) {
+		gpiod_set_array_value_cansleep(espi->gpio_descs->ndescs,
+					       espi->gpio_descs->desc,
+					       NULL,
+					       cs->gpio_vals);
+	}
+
 	/* don't write the mode register if the mode doesn't change */
 	if (cs->hw_mode != hw_mode_old)
 		fsl_espi_write_reg(espi, ESPI_SPMODEx(spi->chip_select),
@@ -476,21 +495,21 @@ out:
 static int fsl_espi_setup(struct spi_device *spi)
 {
 	struct fsl_espi *espi;
-	u32 loop_mode;
+	u32 loop_mode, chip_select;
 	struct fsl_espi_cs *cs = spi_get_ctldata(spi);
-
-	if (!cs) {
-		cs = kzalloc(sizeof(*cs), GFP_KERNEL);
-		if (!cs)
-			return -ENOMEM;
-		spi_set_ctldata(spi, cs);
-	}
 
 	espi = spi_master_get_devdata(spi->master);
 
+	if (!cs) {
+		cs = espi->cs_map + spi->chip_select;
+		spi_set_ctldata(spi, cs);
+	}
+
+	chip_select = cs->real_chip_select;
+
 	pm_runtime_get_sync(espi->dev);
 
-	cs->hw_mode = fsl_espi_read_reg(espi, ESPI_SPMODEx(spi->chip_select));
+	cs->hw_mode = fsl_espi_read_reg(espi, ESPI_SPMODEx(chip_select));
 	/* mask out bits we are going to set */
 	cs->hw_mode &= ~(CSMODE_CP_BEGIN_EDGECLK | CSMODE_CI_INACTIVEHIGH
 			 | CSMODE_REV);
@@ -519,9 +538,6 @@ static int fsl_espi_setup(struct spi_device *spi)
 
 static void fsl_espi_cleanup(struct spi_device *spi)
 {
-	struct fsl_espi_cs *cs = spi_get_ctldata(spi);
-
-	kfree(cs);
 	spi_set_ctldata(spi, NULL);
 }
 
@@ -618,6 +634,8 @@ static void fsl_espi_init_regs(struct device *dev, bool initial)
 	struct device_node *nc;
 	u32 csmode, cs, prop;
 	int ret;
+	struct fsl_espi_cs *csm;
+	unsigned int i;
 
 	/* SPI controller initializations */
 	fsl_espi_write_reg(espi, ESPI_SPMODE, 0);
@@ -632,7 +650,29 @@ static void fsl_espi_init_regs(struct device *dev, bool initial)
 		if (ret || cs >= master->num_chipselect)
 			continue;
 
+		csm = espi->cs_map + cs;
 		csmode = CSMODE_INIT_VAL;
+
+		memset(csm, 0, sizeof(*csm));
+		csm->real_chip_select = cs;
+
+		ret = of_property_read_u32(nc, "omic,reg", &prop);
+		if (!ret) {
+			csm->real_chip_select = prop;
+		}
+		if (espi->gpio_descs) {
+			u32 vals[MAX_CS_GPIOS];
+
+			ret = of_property_read_u32_array(
+				nc, "omic,gpio-val",
+				vals, min_t(unsigned int,
+					    MAX_CS_GPIOS, espi->gpio_descs->ndescs));
+			if (!ret) {
+				csm->gpio_vals[0] = 0;
+				for (i = 0; i < espi->gpio_descs->ndescs; i++)
+					__assign_bit(i, csm->gpio_vals, !!vals[i]);
+			}
+		}
 
 		/* check if CSBEF is set in device tree */
 		ret = of_property_read_u32(nc, "fsl,csbef", &prop);
@@ -648,10 +688,13 @@ static void fsl_espi_init_regs(struct device *dev, bool initial)
 			csmode |= CSMODE_AFT(prop);
 		}
 
-		fsl_espi_write_reg(espi, ESPI_SPMODEx(cs), csmode);
+		csm->hw_mode = csmode;
+
+		fsl_espi_write_reg(espi, ESPI_SPMODEx(csm->real_chip_select), csmode);
 
 		if (initial)
-			dev_info(dev, "cs=%u, init_csmode=0x%x\n", cs, csmode);
+			dev_info(dev, "cs=%u(%u), init_csmode=0x%x\n",
+				 cs, csm->real_chip_select, csmode);
 	}
 
 	/* Enable SPI interface */
@@ -659,13 +702,14 @@ static void fsl_espi_init_regs(struct device *dev, bool initial)
 }
 
 static int fsl_espi_probe(struct device *dev, struct resource *mem,
-			  unsigned int irq, unsigned int num_cs)
+			  unsigned int irq, unsigned int num_cs, struct gpio_descs *descs)
 {
 	struct spi_master *master;
 	struct fsl_espi *espi;
 	int ret;
 
-	master = spi_alloc_master(dev, sizeof(struct fsl_espi));
+	master = spi_alloc_master(dev,
+				  offsetof(struct fsl_espi, cs_map[num_cs]));
 	if (!master)
 		return -ENOMEM;
 
@@ -709,6 +753,8 @@ static int fsl_espi_probe(struct device *dev, struct resource *mem,
 	if (ret)
 		goto err_probe;
 
+	espi->gpio_descs = descs;
+
 	fsl_espi_init_regs(dev, true);
 
 	pm_runtime_set_autosuspend_delay(dev, AUTOSUSPEND_TIMEOUT);
@@ -737,17 +783,32 @@ err_probe:
 	return ret;
 }
 
-static int of_fsl_espi_get_chipselects(struct device *dev)
+static int of_fsl_espi_get_chipselects(struct device *dev,
+				       struct gpio_descs **gpios)
 {
 	struct device_node *np = dev->of_node;
 	u32 num_cs;
 	int ret;
+	struct gpio_descs *descs;
+
+	*gpios = NULL;
 
 	ret = of_property_read_u32(np, "fsl,espi-num-chipselects", &num_cs);
 	if (ret) {
 		dev_err(dev, "No 'fsl,espi-num-chipselects' property\n");
 		return 0;
 	}
+
+	descs = devm_gpiod_get_array_optional(dev, "omic,cs", GPIOD_ASIS);
+	if (descs) {
+		if (descs->ndescs > MAX_CS_GPIOS) {
+			dev_err(dev, "More than %u CS GPIOs\n", MAX_CS_GPIOS);
+			return 0;
+		}
+		num_cs <<= descs->ndescs;
+		*gpios = descs;
+	}
+
 
 	return num_cs;
 }
@@ -759,13 +820,14 @@ static int of_fsl_espi_probe(struct platform_device *ofdev)
 	struct resource mem;
 	unsigned int irq, num_cs;
 	int ret;
+	struct gpio_descs *descs;
 
 	if (of_property_read_bool(np, "mode")) {
 		dev_err(dev, "mode property is not supported on ESPI!\n");
 		return -EINVAL;
 	}
 
-	num_cs = of_fsl_espi_get_chipselects(dev);
+	num_cs = of_fsl_espi_get_chipselects(dev, &descs);
 	if (!num_cs)
 		return -EINVAL;
 
@@ -777,7 +839,7 @@ static int of_fsl_espi_probe(struct platform_device *ofdev)
 	if (!irq)
 		return -EINVAL;
 
-	return fsl_espi_probe(dev, &mem, irq, num_cs);
+	return fsl_espi_probe(dev, &mem, irq, num_cs, descs);
 }
 
 static int of_fsl_espi_remove(struct platform_device *dev)
