@@ -109,7 +109,7 @@
 
 const char gfar_driver_version[] = "2.0";
 
-static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit);
+static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit, int is_napi);
 
 MODULE_AUTHOR("Freescale Semiconductor, Inc");
 MODULE_DESCRIPTION("Gianfar Ethernet Driver");
@@ -510,7 +510,7 @@ static void disable_napi(struct gfar_private *priv)
 	int i;
 
 	for (i = 0; i < priv->num_grps; i++) {
-		if (!priv->non_napi_rx)
+		if (priv->gfargrp[i].rx_bit_map_napi)
 			napi_disable(&priv->gfargrp[i].napi_rx);
 		if (!priv->non_napi_tx)
 			napi_disable(&priv->gfargrp[i].napi_tx);
@@ -522,7 +522,7 @@ static void enable_napi(struct gfar_private *priv)
 	int i;
 
 	for (i = 0; i < priv->num_grps; i++) {
-		if (!priv->non_napi_rx)
+		if (priv->gfargrp[i].rx_bit_map_napi)
 			napi_enable(&priv->gfargrp[i].napi_rx);
 		if (!priv->non_napi_tx)
 			napi_enable(&priv->gfargrp[i].napi_tx);
@@ -589,28 +589,27 @@ static int gfar_parse_group(struct device_node *np,
 		grp->tx_bit_map = 0xFF;
 	}
 
-	/* bit_map's MSB is q0 (from q0 to q7) but, for_each_set_bit parses
-	 * right to left, so we need to revert the 8 bits to get the q index
-	 */
-	grp->rx_bit_map = bitrev8(grp->rx_bit_map);
-	grp->tx_bit_map = bitrev8(grp->tx_bit_map);
+	grp->rx_bit_map_napi = grp->rx_bit_map & priv->napi_rx_mask;
+	grp->rx_bit_map_irq = grp->rx_bit_map & ~priv->napi_rx_mask;
 
 	/* Calculate RSTAT, TSTAT, RQUEUE and TQUEUE values,
 	 * also assign queues to groups
 	 */
-	for_each_set_bit(i, &grp->rx_bit_map, priv->num_rx_queues) {
+	for (i = 0; i < priv->num_rx_queues; i++) {
+		if (!(grp->rx_bit_map & (0x80 >> i)))
+			continue;
 		if (!grp->rx_queue)
 			grp->rx_queue = priv->rx_queue[i];
-		grp->num_rx_queues++;
 		grp->rstat |= (RSTAT_CLEAR_RHALT >> i);
 		priv->rqueue |= ((RQUEUE_EN0 | RQUEUE_EX0) >> i);
 		priv->rx_queue[i]->grp = grp;
 	}
 
-	for_each_set_bit(i, &grp->tx_bit_map, priv->num_tx_queues) {
+	for (i = 0; i < priv->num_tx_queues; i++) {
+		if (!(grp->tx_bit_map & (0x80 >> i)))
+			continue;
 		if (!grp->tx_queue)
 			grp->tx_queue = priv->tx_queue[i];
-		grp->num_tx_queues++;
 		grp->tstat |= (TSTAT_CLEAR_THALT >> i);
 		priv->tqueue |= (TQUEUE_EN0 >> i);
 		priv->tx_queue[i]->grp = grp;
@@ -690,6 +689,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	u32 stash_idx = 0;
 	unsigned int num_tx_qs, num_rx_qs;
 	unsigned short mode, poll_mode;
+	u32 rxq_mask;
 
 	if (!np)
 		return -ENODEV;
@@ -762,10 +762,9 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	if (poll_mode == GFAR_MQ_POLLING)
 		priv->prio_sched_en = 1;
 
-	if (of_property_read_bool(np, "non-napi-rx")) {
-		priv->non_napi_rx = true;
-	} else {
-		priv->non_napi_rx = false;
+	priv->napi_rx_mask = 0xff;
+	if (!of_property_read_u32(np, "rx-napi-map", &rxq_mask)) {
+		priv->napi_rx_mask = rxq_mask;
 	}
 
 	if (of_property_read_bool(np, "non-napi-tx")) {
@@ -2395,10 +2394,12 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 	struct gfar __iomem *regs = gfargrp->regs;
 	struct gfar_priv_rx_q *rx_queue = NULL;
 	int i;
-	unsigned long rstat_rxf;
+	u32 rstat_rxf;
+	u32 rx_napi;
+	u32 rx_irq;
 
 	/* First, read rstat, to find out which Q's this interrupt was
-	 * for, clear those bots in rstat, and then clear IEVENT, so
+	 * for, clear those bits in rstat, and then clear IEVENT, so
 	 * that interrupts aren't called again because of the packets
 	 * that have already arrived.
 	 */
@@ -2408,16 +2409,31 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 
 	gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
-	for (i = 0; i < 8; i++) {
-		if (!(gfargrp->rx_bit_map & (1u << i)))
-			continue;
+	rx_irq = gfargrp->rx_bit_map_irq & rstat_rxf;
+	rx_napi = gfargrp->rx_bit_map_napi & rstat_rxf;
 
+	/* Do the IRQ q's now */
+	for (i = 0; i < 8; i++) {
 		/* skip queue if not active */
-		if (!(rstat_rxf & (RSTAT_CLEAR_RXF0 >> i)))
+		if (!(rx_irq & (0x80u >> i)))
 			continue;
 
 		rx_queue = priv->rx_queue[i];
-		gfar_clean_rx_ring(rx_queue, 9999);
+		gfar_clean_rx_ring(rx_queue, 9999, 0);
+	}
+
+	if (rx_napi) {
+
+		atomic_or(rx_napi, &gfargrp->extra_rstat);
+
+		gfar_write(&regs->rstat, gfargrp->rstat &
+				(gfargrp->rx_bit_map_irq << 16));
+
+		if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
+			__napi_schedule(&gfargrp->napi_rx);
+		}
+	} else {
+		gfar_write(&regs->rstat, gfargrp->rstat);
 	}
 }
 
@@ -2434,7 +2450,7 @@ static irqreturn_t gfar_receive(int irq, void *grp_id)
 		return IRQ_HANDLED;
 	}
 
-	if (priv->non_napi_rx) {
+	if (grp->rx_bit_map_irq != 0) {
 		gfar_poll_rx_irq(grp);
 	} else {
 		if (likely(napi_schedule_prep(&grp->napi_rx))) {
@@ -2461,7 +2477,7 @@ static void gfar_poll_tx_irq(struct gfar_priv_grp *gfargrp)
 	int i;
 
 	for (i = 0; i < 8; i++) {
-		if (!(gfargrp->tx_bit_map & (1u << i)))
+		if (!(gfargrp->tx_bit_map & (0x80u >> i)))
 			continue;
 		tx_queue = priv->tx_queue[i];
 		/* run Tx cleanup to completion */
@@ -2651,7 +2667,7 @@ static void gfar_process_frame(struct net_device *ndev, struct sk_buff *skb)
  * of frames handled
  */
 static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue,
-			      int rx_work_limit)
+			      int rx_work_limit, int is_napi)
 {
 	struct net_device *ndev = rx_queue->ndev;
 	struct gfar_private *priv = netdev_priv(ndev);
@@ -2731,7 +2747,7 @@ static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue,
 		skb->protocol = eth_type_trans(skb, ndev);
 
 		/* Send the packet up the stack */
-		if (priv->non_napi_rx) {
+		if (!is_napi) {
 			netif_receive_skb(skb);
 		} else {
 			napi_gro_receive(&rx_queue->grp->napi_rx, skb);
@@ -2772,7 +2788,7 @@ static int gfar_poll_rx_sq(struct napi_struct *napi, int budget)
 	 */
 	gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
-	work_done = gfar_clean_rx_ring(rx_queue, budget);
+	work_done = gfar_clean_rx_ring(rx_queue, budget, 0);
 
 	if (work_done < budget) {
 		napi_complete_done(napi, work_done);
@@ -2817,39 +2833,56 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 	struct gfar_priv_rx_q *rx_queue = NULL;
 	int work_done = 0, work_done_per_q = 0;
 	int i, budget_per_q = 0;
-	unsigned long rstat_rxf;
+	unsigned long rstat_rxf, tmp_rxf;
 	int num_act_queues;
 
-	/* Clear IEVENT, so interrupts aren't called again
-	 * because of the packets that have already arrived
-	 */
-	gfar_write(&regs->ievent, IEVENT_RX_MASK);
+	if (gfargrp->rx_bit_map_irq == 0) {
+		/* Clear IEVENT, so interrupts aren't called again
+		 * because of the packets that have already arrived
+		 */
+		gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
-	rstat_rxf = gfar_read(&regs->rstat) & RSTAT_RXF_MASK;
+		rstat_rxf = gfar_read(&regs->rstat);
+	} else {
+		rstat_rxf = atomic_xchg(&gfargrp->extra_rstat, 0);
 
-	num_act_queues = bitmap_weight(&rstat_rxf, MAX_RX_QS);
+		tmp_rxf = gfar_read(&regs->rstat);
+
+		rstat_rxf |= tmp_rxf;
+	}
+
+	rstat_rxf &= gfargrp->rx_bit_map_napi;
+
+	num_act_queues = hweight8(rstat_rxf);
 	if (num_act_queues)
 		budget_per_q = budget/num_act_queues;
 
-	for_each_set_bit(i, &gfargrp->rx_bit_map, priv->num_rx_queues) {
+	for (i = 0; i < priv->num_rx_queues; i++) {
 		/* skip queue if not active */
-		if (!(rstat_rxf & (RSTAT_CLEAR_RXF0 >> i)))
+		if (!(rstat_rxf & (0x80u >> i)))
 			continue;
 
 		rx_queue = priv->rx_queue[i];
 		work_done_per_q =
-			gfar_clean_rx_ring(rx_queue, budget_per_q);
+			gfar_clean_rx_ring(rx_queue, budget_per_q, 1);
 		work_done += work_done_per_q;
 
 		/* finished processing this queue */
 		if (work_done_per_q < budget_per_q) {
-			/* clear active queue hw indication */
-			gfar_write(&regs->rstat,
-				   RSTAT_CLEAR_RXF0 >> i);
-				num_act_queues--;
+			if (gfargrp->rx_bit_map_irq == 0) {
+				/* clear active queue hw indication */
+				gfar_write(&regs->rstat,
+						RSTAT_CLEAR_RXF0 >> i);
+			}
+			num_act_queues--;
 
-				if (!num_act_queues)
-					break;
+			if (!num_act_queues)
+				break;
+		} else {
+			/* If we ran out of budget on a Q, we should
+			 * set the bit in extra_rstat so that we look
+			 * at it again. */
+			atomic_or(0x80u >> i, &gfargrp->extra_rstat);
 		}
 	}
 
@@ -2857,9 +2890,12 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 		napi_complete_done(napi, work_done);
 
 		/* Clear the halt bit in RSTAT */
-		gfar_write(&regs->rstat, gfargrp->rstat);
+		gfar_write(&regs->rstat, gfargrp->rstat &
+				(gfargrp->rx_bit_map_napi << 16));
 
-		gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
+		if (gfargrp->rx_bit_map_irq == 0) {
+			gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
+		}
 	}
 
 	return work_done;
@@ -2880,7 +2916,9 @@ static int gfar_poll_tx(struct napi_struct *napi, int budget)
 	 */
 	gfar_write(&regs->ievent, IEVENT_TX_MASK);
 
-	for_each_set_bit(i, &gfargrp->tx_bit_map, priv->num_tx_queues) {
+	for (i = 0; i < priv->num_tx_queues; i++) {
+		if (!(gfargrp->tx_bit_map & (0x80u >> i)))
+			continue;
 		tx_queue = priv->tx_queue[i];
 		/* run Tx cleanup to completion */
 		if (tx_queue->tx_skbuff[tx_queue->skb_dirtytx]) {
@@ -2958,7 +2996,7 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 		 * wait until the gfar_poll_rx function has
 		 * replenished the buffers.
 		 */
-		if (priv->non_napi_rx) {
+		if (gfargrp->rx_bit_map_irq != 0) {
 			gfar_poll_rx_irq(gfargrp);
 		} else {
 			if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
@@ -3856,19 +3894,19 @@ static int gfar_probe(struct platform_device *ofdev)
 	/* Register for napi ...We are registering NAPI for each grp */
 	for (i = 0; i < priv->num_grps; i++) {
 		if (priv->poll_mode == GFAR_SQ_POLLING) {
-			if (!priv->non_napi_rx)
+			if (priv->gfargrp[i].rx_bit_map_napi)
 			    netif_napi_add(dev, &priv->gfargrp[i].napi_rx,
 				    gfar_poll_rx_sq, GFAR_DEV_WEIGHT);
 			if (!priv->non_napi_tx)
 			    netif_tx_napi_add(dev, &priv->gfargrp[i].napi_tx,
 				    gfar_poll_tx_sq, 2);
 		} else {
-		    if (!priv->non_napi_rx)
-			netif_napi_add(dev, &priv->gfargrp[i].napi_rx,
-				gfar_poll_rx, GFAR_DEV_WEIGHT);
-		    if (!priv->non_napi_tx)
-			netif_tx_napi_add(dev, &priv->gfargrp[i].napi_tx,
-				gfar_poll_tx, 2);
+			if (priv->gfargrp[i].rx_bit_map_napi)
+				netif_napi_add(dev, &priv->gfargrp[i].napi_rx,
+						gfar_poll_rx, GFAR_DEV_WEIGHT);
+			if (!priv->non_napi_tx)
+				netif_tx_napi_add(dev, &priv->gfargrp[i].napi_tx,
+						gfar_poll_tx, 2);
 		}
 	}
 
@@ -3978,7 +4016,9 @@ static int gfar_probe(struct platform_device *ofdev)
 	 * provided which set of benchmarks.
 	 */
 	netdev_info(dev, "Running with RX-NAPI %s, TX-NAPI %s\n",
-		priv->non_napi_rx ? "disabled" : "enabled",
+		priv->napi_rx_mask == 0 ? "disabled" :
+		priv->napi_rx_mask == 0xff ? "enabled" :
+		"split",
 		priv->non_napi_tx ? "disabled" : "enabled");
 	for (i = 0; i < priv->num_rx_queues; i++)
 		netdev_info(dev, "RX BD ring size for Q[%d]: %d\n",
