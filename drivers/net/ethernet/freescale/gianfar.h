@@ -1050,13 +1050,13 @@ struct gfar_priv_grp {
 	struct gfar_priv_rx_q *rx_queue;
 	unsigned int tstat;
 	unsigned int rstat;
-	u32 extra_rstat;
+	atomic_t extra_rstat;
 
 	struct gfar_private *priv;
-	unsigned long num_tx_queues;
 	unsigned long tx_bit_map;
-	unsigned long num_rx_queues;
 	unsigned long rx_bit_map;
+	u32 rx_bit_map_napi;
+	u32 rx_bit_map_irq;
 
 	struct gfar_irqinfo *irqinfo[GFAR_NUM_IRQS];
 };
@@ -1102,7 +1102,7 @@ struct gfar_private {
 	int hwts_rx_en;
 	int hwts_tx_en;
 
-	bool non_napi_rx;
+	u32 napi_rx_mask;
 	bool non_napi_tx;
 
 	struct gfar_priv_tx_q *tx_queue[MAX_TX_QS];
@@ -1219,24 +1219,26 @@ static inline void gfar_write_isrg(struct gfar_private *priv)
 {
 	struct gfar __iomem *regs = priv->gfargrp[0].regs;
 	u32 __iomem *baddr = &regs->isrg0;
-	u32 isrg = 0;
 	int grp_idx, i;
 
 	for (grp_idx = 0; grp_idx < priv->num_grps; grp_idx++) {
 		struct gfar_priv_grp *grp = &priv->gfargrp[grp_idx];
 
-		for_each_set_bit(i, &grp->rx_bit_map, priv->num_rx_queues) {
-			isrg |= (ISRG_RR0 >> i);
+		u32 isrg = 0;
+
+		for (i = 0; i < priv->num_rx_queues; i++) {
+			if (grp->rx_bit_map & (0x80u >> i))
+				isrg |= ISRG_RR0 >> i;
 		}
 
-		for_each_set_bit(i, &grp->tx_bit_map, priv->num_tx_queues) {
-			isrg |= (ISRG_TR0 >> i);
+		for (i = 0; i < priv->num_tx_queues; i++) {
+			if (grp->tx_bit_map & (0x80u >> i))
+				isrg |= ISRG_TR0 >> i;
 		}
 
 		gfar_write(baddr, isrg);
 
 		baddr++;
-		isrg = 0;
 	}
 }
 
