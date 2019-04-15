@@ -600,8 +600,8 @@ static int gfar_parse_group(struct device_node *np,
 			continue;
 		if (!grp->rx_queue)
 			grp->rx_queue = priv->rx_queue[i];
-		grp->rstat |= (RSTAT_CLEAR_RHALT >> i);
-		priv->rqueue |= ((RQUEUE_EN0 | RQUEUE_EX0) >> i);
+		grp->rstat_clear_rhalt |= RSTAT_RHALT(i);
+		priv->rqueue |= RQUEUE_EN(i) | RQUEUE_EX(i);
 		priv->rx_queue[i]->grp = grp;
 	}
 
@@ -610,8 +610,8 @@ static int gfar_parse_group(struct device_node *np,
 			continue;
 		if (!grp->tx_queue)
 			grp->tx_queue = priv->tx_queue[i];
-		grp->tstat |= (TSTAT_CLEAR_THALT >> i);
-		priv->tqueue |= (TQUEUE_EN0 >> i);
+		grp->tstat_clear_thalt |= TSTAT_THALT(i);
+		priv->tqueue |= TQUEUE_EN(i);
 		priv->tx_queue[i]->grp = grp;
 	}
 
@@ -1273,8 +1273,8 @@ static void gfar_start(struct gfar_private *priv)
 	for (i = 0; i < priv->num_grps; i++) {
 		regs = priv->gfargrp[i].regs;
 		/* Clear THLT/RHLT, so that the DMA starts polling now */
-		gfar_write(&regs->tstat, priv->gfargrp[i].tstat);
-		gfar_write(&regs->rstat, priv->gfargrp[i].rstat);
+		gfar_write(&regs->tstat, priv->gfargrp[i].tstat_clear_thalt);
+		gfar_write(&regs->rstat, priv->gfargrp[i].rstat_clear_rhalt);
 	}
 
 	/* Enable Rx/Tx DMA */
@@ -2068,7 +2068,7 @@ static netdev_tx_t gfar_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	ndelay(500);
 
 	/* Tell the DMA to go go go */
-	gfar_write(&regs->tstat, TSTAT_CLEAR_THALT >> tx_queue->qindex);
+	gfar_write(&regs->tstat, TSTAT_THALT(tx_queue->qindex));
 
 	return NETDEV_TX_OK;
 
@@ -2398,16 +2398,11 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 	u32 rx_napi;
 	u32 rx_irq;
 
-	/* First, read rstat, to find out which Q's this interrupt was
-	 * for, clear those bits in rstat, and then clear IEVENT, so
-	 * that interrupts aren't called again because of the packets
-	 * that have already arrived.
-	 */
+	gfar_write(&regs->ievent, IEVENT_RX_MASK);
+
 	rstat_rxf = gfar_read(&regs->rstat);
 
 	gfar_write(&regs->rstat, rstat_rxf & RSTAT_RXF_MASK);
-
-	gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
 	rx_irq = gfargrp->rx_bit_map_irq & rstat_rxf;
 	rx_napi = gfargrp->rx_bit_map_napi & rstat_rxf;
@@ -2415,7 +2410,7 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 	/* Do the IRQ q's now */
 	for (i = 0; i < 8; i++) {
 		/* skip queue if not active */
-		if (!(rx_irq & (0x80u >> i)))
+		if (!(rx_irq & RSTAT_RXF(i)))
 			continue;
 
 		rx_queue = priv->rx_queue[i];
@@ -2426,14 +2421,14 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 
 		atomic_or(rx_napi, &gfargrp->extra_rstat);
 
-		gfar_write(&regs->rstat, gfargrp->rstat &
+		gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt &
 				(gfargrp->rx_bit_map_irq << 16));
 
 		if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
 			__napi_schedule(&gfargrp->napi_rx);
 		}
 	} else {
-		gfar_write(&regs->rstat, gfargrp->rstat);
+		gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt);
 	}
 }
 
@@ -2793,7 +2788,7 @@ static int gfar_poll_rx_sq(struct napi_struct *napi, int budget)
 	if (work_done < budget) {
 		napi_complete_done(napi, work_done);
 		/* Clear the halt bit in RSTAT */
-		gfar_write(&regs->rstat, gfargrp->rstat);
+		gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt);
 
 		gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
 	}
@@ -2833,7 +2828,7 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 	struct gfar_priv_rx_q *rx_queue = NULL;
 	int work_done = 0, work_done_per_q = 0;
 	int i, budget_per_q = 0;
-	unsigned long rstat_rxf, tmp_rxf;
+	unsigned long rstat_rxf;
 	int num_act_queues;
 
 	if (gfargrp->rx_bit_map_irq == 0) {
@@ -2842,14 +2837,10 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 		 */
 		gfar_write(&regs->ievent, IEVENT_RX_MASK);
 
-		rstat_rxf = gfar_read(&regs->rstat);
-	} else {
-		rstat_rxf = atomic_xchg(&gfargrp->extra_rstat, 0);
-
-		tmp_rxf = gfar_read(&regs->rstat);
-
-		rstat_rxf |= tmp_rxf;
 	}
+
+	rstat_rxf = atomic_xchg(&gfargrp->extra_rstat, 0);
+	rstat_rxf |= gfar_read(&regs->rstat);
 
 	rstat_rxf &= gfargrp->rx_bit_map_napi;
 
@@ -2859,21 +2850,18 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 
 	for (i = 0; i < priv->num_rx_queues; i++) {
 		/* skip queue if not active */
-		if (!(rstat_rxf & (0x80u >> i)))
+		if (!(rstat_rxf & RSTAT_RXF(i)))
 			continue;
 
+		/* clear active queue hw indication */
+		gfar_write(&regs->rstat, RSTAT_RXF(i));
+
 		rx_queue = priv->rx_queue[i];
-		work_done_per_q =
-			gfar_clean_rx_ring(rx_queue, budget_per_q, 1);
+		work_done_per_q = gfar_clean_rx_ring(rx_queue, budget_per_q, 1);
 		work_done += work_done_per_q;
 
 		/* finished processing this queue */
 		if (work_done_per_q < budget_per_q) {
-			if (gfargrp->rx_bit_map_irq == 0) {
-				/* clear active queue hw indication */
-				gfar_write(&regs->rstat,
-						RSTAT_CLEAR_RXF0 >> i);
-			}
 			num_act_queues--;
 
 			if (!num_act_queues)
@@ -2882,7 +2870,7 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 			/* If we ran out of budget on a Q, we should
 			 * set the bit in extra_rstat so that we look
 			 * at it again. */
-			atomic_or(0x80u >> i, &gfargrp->extra_rstat);
+			atomic_or(RSTAT_RXF(i), &gfargrp->extra_rstat);
 		}
 	}
 
@@ -2890,7 +2878,7 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 		napi_complete_done(napi, work_done);
 
 		/* Clear the halt bit in RSTAT */
-		gfar_write(&regs->rstat, gfargrp->rstat &
+		gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt &
 				(gfargrp->rx_bit_map_napi << 16));
 
 		if (gfargrp->rx_bit_map_irq == 0) {
@@ -4167,7 +4155,7 @@ static void gfar_start_wol_filer(struct gfar_private *priv)
 	for (i = 0; i < priv->num_grps; i++) {
 		regs = priv->gfargrp[i].regs;
 		/* Clear RHLT, so that the DMA starts polling now */
-		gfar_write(&regs->rstat, priv->gfargrp[i].rstat);
+		gfar_write(&regs->rstat, priv->gfargrp[i].rstat_clear_rhalt);
 		/* enable the Filer General Purpose Interrupt */
 		gfar_write(&regs->imask, IMASK_FGPI);
 	}
