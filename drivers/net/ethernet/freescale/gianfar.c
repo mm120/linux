@@ -3241,10 +3241,13 @@ static int gfar_sysfs_filer_read(struct seq_file *seq, void *v)
 {
 	struct net_device *dev = seq->private;
 	struct gfar_private *priv = netdev_priv(dev);
+	struct gfar __iomem *regs = priv->gfargrp[0].regs;
 	int i;
 	unsigned int fcr, fpr;
 	unsigned int lfcr = 0, lfpr = 0;
 	u32 mask = 0xffffffff;
+
+	seq_printf(seq, "RBIFX: %08x\n", gfar_read(&regs->rbifx));
 
 	seq_printf(seq, "far fcr      fpr        "
 			"gpi H hash  Q cle rej and op pid\n");
@@ -3303,9 +3306,11 @@ static const struct file_operations gfar_filer_fops = {
 static void gfar_sysfs_ext(
 		struct seq_file *seq, const struct ethtool_flow_ext *ext)
 {
-	seq_printf(seq, "%04x %04x",
+	seq_printf(seq, "%04x %04x %08x %08x",
 			ext->vlan_etype,
-			ext->vlan_tci);
+			ext->vlan_tci,
+			ext->data[0],
+			ext->data[1]);
 }
 
 static void gfar_sysfs_ether(
@@ -3367,7 +3372,7 @@ static int gfar_sysfs_nfc_read(struct seq_file *seq, void *v)
 		}
 
 		if (flow->flow_type & FLOW_EXT) {
-			seq_printf(seq, "   ");
+			seq_printf(seq, "  EXT ");
 			gfar_sysfs_ext(seq, &flow->h_ext);
 			seq_printf(seq, "  m ");
 			gfar_sysfs_ext(seq, &flow->m_ext);

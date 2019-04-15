@@ -1205,6 +1205,12 @@ static int gfar_convert_to_filer(const struct ethtool_rx_flow_spec *rule,
 			gfar_set_parse_bits(vlan, vlan_mask, tab);
 		gfar_set_ether(&rule->h_u.ether_spec,
 			       &rule->m_u.ether_spec, tab);
+		if (rule->flow_type & FLOW_EXT)	{
+			tab->rbifx = be32_to_cpu(rule->h_ext.data[1]);
+			gfar_set_attribute(be32_to_cpu(rule->h_ext.data[0]),
+					   be32_to_cpu(rule->m_ext.data[0]),
+					   RQFCR_PID_ARB, tab);
+		}
 		break;
 	default:
 		return -1;
@@ -1257,7 +1263,9 @@ static int gfar_convert_to_filer(const struct ethtool_rx_flow_spec *rule,
 static int gfar_write_filer_table(struct gfar_private *priv,
 				  struct filer_table *tab)
 {
+	struct gfar __iomem *regs = priv->gfargrp[0].regs;
 	u32 i = 0;
+
 	if (tab->index > MAX_FILER_IDX - 1)
 		return -EBUSY;
 
@@ -1272,6 +1280,9 @@ static int gfar_write_filer_table(struct gfar_private *priv,
 	 */
 	gfar_write_filer(priv, i, RQFCR_CMP_MATCH | RQFCR_PID_MASK, 0x0);
 
+	if (tab->rbifx)
+		gfar_write(&regs->rbifx, tab->rbifx);
+
 	return 0;
 }
 
@@ -1280,7 +1291,8 @@ static int gfar_check_capability(struct ethtool_rx_flow_spec *flow,
 {
 
 	if (flow->flow_type & FLOW_EXT)	{
-		if (flow->m_ext.data[0] || flow->m_ext.data[1])
+		if (flow->flow_type != (ETHER_FLOW | FLOW_EXT) &&
+		    (flow->m_ext.data[0] || flow->m_ext.data[1]))
 			netdev_warn(priv->ndev,
 				    "User-specific data not supported!\n");
 		if (flow->m_ext.vlan_etype)

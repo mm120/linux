@@ -1329,6 +1329,7 @@ struct gfar_filer_entry {
 struct filer_table {
 	u32 index;
 	u32 last_mask;
+	u32 rbifx;
 	struct gfar_filer_entry fe[MAX_FILER_CACHE_IDX + 20];
 };
 
