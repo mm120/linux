@@ -156,15 +156,8 @@ extern const char gfar_driver_version[];
 #define MINFLR_INIT_SETTINGS	0x00000040
 
 /* Tqueue control */
-#define TQUEUE_EN0		0x00008000
-#define TQUEUE_EN1		0x00004000
-#define TQUEUE_EN2		0x00002000
-#define TQUEUE_EN3		0x00001000
-#define TQUEUE_EN4		0x00000800
-#define TQUEUE_EN5		0x00000400
-#define TQUEUE_EN6		0x00000200
-#define TQUEUE_EN7		0x00000100
 #define TQUEUE_EN_ALL		0x0000FF00
+#define TQUEUE_EN(n)		(0x8000u >> (n))
 
 #define TR03WT_WT0_MASK		0xFF000000
 #define TR03WT_WT1_MASK		0x00FF0000
@@ -177,41 +170,19 @@ extern const char gfar_driver_version[];
 #define TR47WT_WT7_MASK		0x000000FF
 
 /* Rqueue control */
-#define RQUEUE_EX0		0x00800000
-#define RQUEUE_EX1		0x00400000
-#define RQUEUE_EX2		0x00200000
-#define RQUEUE_EX3		0x00100000
-#define RQUEUE_EX4		0x00080000
-#define RQUEUE_EX5		0x00040000
-#define RQUEUE_EX6		0x00020000
-#define RQUEUE_EX7		0x00010000
 #define RQUEUE_EX_ALL		0x00FF0000
+#define RQUEUE_EX(n)		(0x800000u >> (n))
 
-#define RQUEUE_EN0		0x00000080
-#define RQUEUE_EN1		0x00000040
-#define RQUEUE_EN2		0x00000020
-#define RQUEUE_EN3		0x00000010
-#define RQUEUE_EN4		0x00000008
-#define RQUEUE_EN5		0x00000004
-#define RQUEUE_EN6		0x00000002
-#define RQUEUE_EN7		0x00000001
 #define RQUEUE_EN_ALL		0x000000FF
+#define RQUEUE_EN(n)		(0x80u >> (n))
 
 /* Init to do tx snooping for buffers and descriptors */
 #define DMACTRL_INIT_SETTINGS   0x000000c3
 #define DMACTRL_GRS             0x00000010
 #define DMACTRL_GTS             0x00000008
 
-#define TSTAT_CLEAR_THALT_ALL	0xFF000000
-#define TSTAT_CLEAR_THALT	0x80000000
-#define TSTAT_CLEAR_THALT0	0x80000000
-#define TSTAT_CLEAR_THALT1	0x40000000
-#define TSTAT_CLEAR_THALT2	0x20000000
-#define TSTAT_CLEAR_THALT3	0x10000000
-#define TSTAT_CLEAR_THALT4	0x08000000
-#define TSTAT_CLEAR_THALT5	0x04000000
-#define TSTAT_CLEAR_THALT6	0x02000000
-#define TSTAT_CLEAR_THALT7	0x01000000
+#define TSTAT_THALT_ALL		0xFF000000
+#define TSTAT_THALT(n)		(0x80000000u >> (n))
 
 /* Interrupt coalescing macros */
 #define IC_ICEN			0x80000000
@@ -255,9 +226,10 @@ extern const char gfar_driver_version[];
 #define RCTRL_PADDING(x)	((x << 16) & RCTRL_PAL_MASK)
 
 
-#define RSTAT_CLEAR_RHALT	0x00800000
-#define RSTAT_CLEAR_RXF0	0x00000080
+#define RSTAT_RHALT_MASK	0x00ff0000
 #define RSTAT_RXF_MASK		0x000000ff
+#define RSTAT_RHALT(n)		(0x800000u >> (n))
+#define RSTAT_RXF(n)		(0x80u >> (n))
 
 #define TCTRL_IPCSEN		0x00004000
 #define TCTRL_TUCSEN		0x00002000
@@ -1048,8 +1020,8 @@ struct gfar_priv_grp {
 	struct gfar __iomem *regs;
 	struct gfar_priv_tx_q *tx_queue;
 	struct gfar_priv_rx_q *rx_queue;
-	unsigned int tstat;
-	unsigned int rstat;
+	unsigned int tstat_clear_thalt;
+	unsigned int rstat_clear_rhalt;
 	atomic_t extra_rstat;
 
 	struct gfar_private *priv;
