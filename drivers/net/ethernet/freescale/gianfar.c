@@ -2825,11 +2825,9 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 		container_of(napi, struct gfar_priv_grp, napi_rx);
 	struct gfar_private *priv = gfargrp->priv;
 	struct gfar __iomem *regs = gfargrp->regs;
-	struct gfar_priv_rx_q *rx_queue = NULL;
 	int work_done = 0, work_done_per_q = 0;
 	int i, budget_per_q = 0;
 	unsigned long rstat_rxf;
-	int num_act_queues;
 
 	if (gfargrp->rx_bit_map_irq == 0) {
 		/* Clear IEVENT, so interrupts aren't called again
@@ -2839,51 +2837,68 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 
 	}
 
-	rstat_rxf = atomic_xchg(&gfargrp->extra_rstat, 0);
-	rstat_rxf |= gfar_read(&regs->rstat);
+	rstat_rxf = gfar_read(&regs->rstat);
 
 	rstat_rxf &= gfargrp->rx_bit_map_napi;
 
-	num_act_queues = hweight8(rstat_rxf);
-	if (num_act_queues)
-		budget_per_q = budget/num_act_queues;
+	gfar_write(&regs->rstat, rstat_rxf);
 
-	for (i = 0; i < priv->num_rx_queues; i++) {
-		/* skip queue if not active */
-		if (!(rstat_rxf & RSTAT_RXF(i)))
-			continue;
+	rstat_rxf |= atomic_xchg(&gfargrp->extra_rstat, 0);
 
-		/* clear active queue hw indication */
-		gfar_write(&regs->rstat, RSTAT_RXF(i));
+	while (rstat_rxf) {
+		if (work_done >= budget) {
+			/* If we ran out of budget, we should set the
+			 * bits in extra_rstat so that we look at the
+			 * unfinished Q's again. */
+			atomic_or(rstat_rxf, &gfargrp->extra_rstat);
 
-		rx_queue = priv->rx_queue[i];
-		work_done_per_q = gfar_clean_rx_ring(rx_queue, budget_per_q, 1);
-		work_done += work_done_per_q;
+			/* Clear the halt bit in RSTAT.  We have
+			 * processed something from each Q, so we
+			 * should be able to receive more packets.
+			 */
+			gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt &
+					(gfargrp->rx_bit_map_napi << 16));
 
-		/* finished processing this queue */
-		if (work_done_per_q < budget_per_q) {
-			num_act_queues--;
+			/* We must return "budget" if we want to be
+			 * called again! */
+			return budget;
+		}
 
-			if (!num_act_queues)
-				break;
-		} else {
-			/* If we ran out of budget on a Q, we should
-			 * set the bit in extra_rstat so that we look
-			 * at it again. */
-			atomic_or(RSTAT_RXF(i), &gfargrp->extra_rstat);
+		/* We know that hweight8(rstat_rxf) can't be zero.  We
+		 * make sure that budget_per_q is never 0, as this
+		 * would cause an infinite loop.  This does mean that
+		 * we might do more work than we should, but that
+		 * should be OK.
+		 */
+		budget_per_q = (budget - work_done) / hweight8(rstat_rxf);
+		if (!budget_per_q)
+			budget_per_q = 1;
+
+		for (i = 0; i < MAX_RX_QS; i++) {
+			/* skip queue if not active */
+			if (!(rstat_rxf & RSTAT_RXF(i)))
+				continue;
+
+			work_done_per_q = gfar_clean_rx_ring(
+				priv->rx_queue[i], budget_per_q, 1);
+			work_done += work_done_per_q;
+
+			/* finished processing this queue */
+			if (work_done_per_q < budget_per_q) {
+				rstat_rxf &= ~RSTAT_RXF(i);
+			}
 		}
 	}
 
-	if (!num_act_queues) {
-		napi_complete_done(napi, work_done);
+no_active_qs:
+	napi_complete_done(napi, work_done);
 
-		/* Clear the halt bit in RSTAT */
-		gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt &
-				(gfargrp->rx_bit_map_napi << 16));
+	/* Clear the halt bit in RSTAT */
+	gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt &
+			(gfargrp->rx_bit_map_napi << 16));
 
-		if (gfargrp->rx_bit_map_irq == 0) {
-			gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
-		}
+	if (gfargrp->rx_bit_map_irq == 0) {
+		gfar_int_enable_mask(gfargrp, IMASK_RX_DEFAULT);
 	}
 
 	return work_done;
