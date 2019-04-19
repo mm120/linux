@@ -3001,7 +3001,8 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 		 */
 		if (gfargrp->rx_bit_map_irq != 0) {
 			gfar_poll_rx_irq(gfargrp);
-		} else {
+		}
+		if (gfargrp->rx_bit_map_napi != 0) {
 			if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
 				__napi_schedule(&gfargrp->napi_rx);
 			}
