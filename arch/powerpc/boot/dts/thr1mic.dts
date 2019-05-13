@@ -9,6 +9,6 @@
  * option) any later version.
  */
 
-/include/ "mic400-base.dtsi"
+/include/ "thr1mic-base.dtsi"
 
 /include/ "mic400-nand-512-normal.dtsi"
