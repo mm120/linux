@@ -301,7 +301,7 @@ static int crb_recv(struct tpm_chip *chip, u8 *buf, size_t count)
 	 */
 	memcpy_fromio(buf, priv->rsp, 8);
 
-	expected = be32_to_cpup((__be32 *)&buf[2]);
+	expected = get_unaligned_be32(&buf[2]);
 	if (expected > count || expected < TPM_HEADER_SIZE)
 		return -EIO;
 

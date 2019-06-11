@@ -109,7 +109,7 @@ static int tpm2_load_context(struct tpm_chip *chip, u8 *buf,
 		return -EFAULT;
 	}
 
-	*handle = be32_to_cpup((__be32 *)&tbuf.data[TPM_HEADER_SIZE]);
+	*handle = get_unaligned_be32(&tbuf.data[TPM_HEADER_SIZE]);
 	*offset += body_size;
 
 	tpm_buf_destroy(&tbuf);
@@ -220,7 +220,7 @@ static int tpm2_load_space(struct tpm_chip *chip)
 
 static bool tpm2_map_to_phandle(struct tpm_space *space, void *handle)
 {
-	u32 vhandle = be32_to_cpup((__be32 *)handle);
+	u32 vhandle = get_unaligned_be32(handle);
 	u32 phandle;
 	int i;
 
@@ -229,7 +229,7 @@ static bool tpm2_map_to_phandle(struct tpm_space *space, void *handle)
 		return false;
 
 	phandle = space->context_tbl[i];
-	*((__be32 *)handle) = cpu_to_be32(phandle);
+	put_unaligned_be32(phandle, handle);
 	return true;
 }
 
@@ -238,7 +238,7 @@ static int tpm2_map_command(struct tpm_chip *chip, u32 cc, u8 *cmd)
 	struct tpm_space *space = &chip->work_space;
 	unsigned int nr_handles;
 	u32 attrs;
-	__be32 *handle;
+	u8 *handle;
 	int i;
 
 	i = tpm2_find_cc(chip, cc);
@@ -248,9 +248,9 @@ static int tpm2_map_command(struct tpm_chip *chip, u32 cc, u8 *cmd)
 	attrs = chip->cc_attrs_tbl[i];
 	nr_handles = (attrs >> TPM2_CC_ATTR_CHANDLES) & GENMASK(2, 0);
 
-	handle = (__be32 *)&cmd[TPM_HEADER_SIZE];
-	for (i = 0; i < nr_handles; i++, handle++) {
-		if ((be32_to_cpu(*handle) & 0xFF000000) == TPM2_HT_TRANSIENT) {
+	handle = &cmd[TPM_HEADER_SIZE];
+	for (i = 0; i < nr_handles; i++, handle += 4) {
+		if ((get_unaligned_be32(handle) & 0xFF000000) == TPM2_HT_TRANSIENT) {
 			if (!tpm2_map_to_phandle(space, handle))
 				return -EINVAL;
 		}
@@ -389,7 +389,7 @@ static int tpm2_map_response_header(struct tpm_chip *chip, u32 cc, u8 *rsp,
 	if (!((attrs >> TPM2_CC_ATTR_RHANDLE) & 1))
 		return 0;
 
-	phandle = be32_to_cpup((__be32 *)&rsp[TPM_HEADER_SIZE]);
+	phandle = get_unaligned_be32(&rsp[TPM_HEADER_SIZE]);
 	phandle_type = phandle & 0xFF000000;
 
 	switch (phandle_type) {
@@ -398,7 +398,7 @@ static int tpm2_map_response_header(struct tpm_chip *chip, u32 cc, u8 *rsp,
 		if (!vhandle)
 			goto out_no_slots;
 
-		*(__be32 *)&rsp[TPM_HEADER_SIZE] = cpu_to_be32(vhandle);
+		put_unaligned_be32(vhandle, &rsp[TPM_HEADER_SIZE]);
 		break;
 	case TPM2_HT_HMAC_SESSION:
 	case TPM2_HT_POLICY_SESSION:
@@ -454,7 +454,7 @@ static int tpm2_map_response_body(struct tpm_chip *chip, u32 cc, u8 *rsp,
 		return -EFAULT;
 
 	for (i = 0, j = 0; i < be32_to_cpu(data->count); i++) {
-		phandle = be32_to_cpup((__be32 *)&data->handles[i]);
+		phandle = be32_to_cpup(&data->handles[i]);
 		phandle_type = phandle & 0xFF000000;
 
 		switch (phandle_type) {
