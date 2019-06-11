@@ -36,7 +36,6 @@ static int tpm_atml_recv(struct tpm_chip *chip, u8 *buf, size_t count)
 	u8 status, *hdr = buf;
 	u32 size;
 	int i;
-	__be32 *native_size;
 
 	/* start reading header */
 	if (count < 6)
@@ -52,8 +51,7 @@ static int tpm_atml_recv(struct tpm_chip *chip, u8 *buf, size_t count)
 	}
 
 	/* size of the data received */
-	native_size = (__force __be32 *) (hdr + 2);
-	size = be32_to_cpu(*native_size);
+	size = get_unaligned_be32(hdr + 2);
 
 	if (count < size) {
 		dev_err(&chip->dev,

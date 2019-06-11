@@ -27,6 +27,7 @@
 #include <linux/tpm.h>
 #include <linux/highmem.h>
 #include <linux/tpm_eventlog.h>
+#include <asm/unaligned.h>
 
 #ifdef CONFIG_X86
 #include <asm/intel-family.h>

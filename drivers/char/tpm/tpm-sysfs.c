@@ -74,7 +74,7 @@ static ssize_t pubek_show(struct device *dev, struct device_attribute *attr,
 		    out->parameters[6], out->parameters[7],
 		    out->parameters[8], out->parameters[9],
 		    out->parameters[10], out->parameters[11],
-		    be32_to_cpu(out->keysize));
+		    get_unaligned_be32(&out->keysize));
 
 	for (i = 0; i < 256; i++) {
 		str += sprintf(str, "%02X ", out->modulus[i]);
