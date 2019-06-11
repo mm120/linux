@@ -378,7 +378,7 @@ static int fsl_espi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	reinit_completion(&espi->done);
 
 	/* Set SPCOM[CS] and SPCOM[TRANLEN] field */
-	spcom = SPCOM_CS(spi->chip_select);
+	spcom = SPCOM_CS(espi->cs_map[spi->chip_select].real_chip_select);
 	spcom |= SPCOM_TRANLEN(t->len - 1);
 
 	/* configure RXSKIP mode */
@@ -799,7 +799,7 @@ static int of_fsl_espi_get_chipselects(struct device *dev,
 		return 0;
 	}
 
-	descs = devm_gpiod_get_array_optional(dev, "omic,cs", GPIOD_ASIS);
+	descs = devm_gpiod_get_array_optional(dev, "omic,cs", GPIOD_OUT_LOW);
 	if (descs) {
 		if (descs->ndescs > MAX_CS_GPIOS) {
 			dev_err(dev, "More than %u CS GPIOs\n", MAX_CS_GPIOS);
