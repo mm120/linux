@@ -183,7 +183,7 @@ ssize_t tpm_common_write(struct file *file, const char __user *buf,
 	}
 
 	if (size < 6 ||
-	    size < be32_to_cpu(*((__be32 *)(priv->data_buffer + 2)))) {
+	    size < get_unaligned_be32(priv->data_buffer + 2)) {
 		ret = -EINVAL;
 		goto out;
 	}

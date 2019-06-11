@@ -71,8 +71,8 @@ static ssize_t tpm_try_transmit(struct tpm_chip *chip, void *buf, size_t bufsiz)
 	if (bufsiz > TPM_BUFSIZE)
 		bufsiz = TPM_BUFSIZE;
 
-	count = be32_to_cpu(header->length);
-	ordinal = be32_to_cpu(header->ordinal);
+	count = get_unaligned_be32(&header->length);
+	ordinal = get_unaligned_be32(&header->ordinal);
 	if (count == 0)
 		return -ENODATA;
 	if (count > bufsiz) {

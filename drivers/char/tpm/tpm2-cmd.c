@@ -491,7 +491,7 @@ int tpm2_seal_trusted(struct tpm_chip *chip,
 	if (rc)
 		goto out;
 
-	blob_len = be32_to_cpup((__be32 *) &buf.data[TPM_HEADER_SIZE]);
+	blob_len = get_unaligned_be32(&buf.data[TPM_HEADER_SIZE]);
 	if (blob_len > MAX_BLOB_SIZE) {
 		rc = -E2BIG;
 		goto out;
@@ -541,11 +541,11 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 	unsigned int blob_len;
 	int rc;
 
-	private_len = be16_to_cpup((__be16 *) &payload->blob[0]);
+	private_len = get_unaligned_be16(&payload->blob[0]);
 	if (private_len > (payload->blob_len - 2))
 		return -E2BIG;
 
-	public_len = be16_to_cpup((__be16 *) &payload->blob[2 + private_len]);
+	public_len = get_unaligned_be16(&payload->blob[2 + private_len]);
 	blob_len = private_len + public_len + 4;
 	if (blob_len > payload->blob_len)
 		return -E2BIG;
@@ -570,8 +570,8 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 
 	rc = tpm_transmit_cmd(chip, &buf, 4, "loading blob");
 	if (!rc)
-		*blob_handle = be32_to_cpup(
-			(__be32 *) &buf.data[TPM_HEADER_SIZE]);
+		*blob_handle = get_unaligned_be32(
+			&buf.data[TPM_HEADER_SIZE]);
 
 out:
 	tpm_buf_destroy(&buf);
@@ -867,8 +867,8 @@ ssize_t tpm2_get_pcr_allocation(struct tpm_chip *chip)
 	if (rc)
 		goto out;
 
-	nr_possible_banks = be32_to_cpup(
-		(__be32 *)&buf.data[TPM_HEADER_SIZE + 5]);
+	nr_possible_banks = get_unaligned_be32(
+		&buf.data[TPM_HEADER_SIZE + 5]);
 
 	chip->allocated_banks = kcalloc(nr_possible_banks,
 					sizeof(*chip->allocated_banks),
@@ -880,7 +880,7 @@ ssize_t tpm2_get_pcr_allocation(struct tpm_chip *chip)
 
 	marker = &buf.data[TPM_HEADER_SIZE + 9];
 
-	rsp_len = be32_to_cpup((__be32 *)&buf.data[2]);
+	rsp_len = get_unaligned_be32(&buf.data[2]);
 	end = &buf.data[rsp_len];
 
 	for (i = 0; i < nr_possible_banks; i++) {
@@ -923,7 +923,7 @@ static int tpm2_get_cc_attrs_tbl(struct tpm_chip *chip)
 {
 	struct tpm_buf buf;
 	u32 nr_commands;
-	__be32 *attrs;
+	u8 *attrs;
 	u32 cc;
 	int i;
 	int rc;
@@ -959,16 +959,16 @@ static int tpm2_get_cc_attrs_tbl(struct tpm_chip *chip)
 	}
 
 	if (nr_commands !=
-	    be32_to_cpup((__be32 *)&buf.data[TPM_HEADER_SIZE + 5])) {
+	    get_unaligned_be32(&buf.data[TPM_HEADER_SIZE + 5])) {
 		tpm_buf_destroy(&buf);
 		goto out;
 	}
 
 	chip->nr_commands = nr_commands;
 
-	attrs = (__be32 *)&buf.data[TPM_HEADER_SIZE + 9];
-	for (i = 0; i < nr_commands; i++, attrs++) {
-		chip->cc_attrs_tbl[i] = be32_to_cpup(attrs);
+	attrs = &buf.data[TPM_HEADER_SIZE + 9];
+	for (i = 0; i < nr_commands; i++, attrs += 4) {
+		chip->cc_attrs_tbl[i] = get_unaligned_be32(attrs);
 		cc = chip->cc_attrs_tbl[i] & 0xFFFF;
 
 		if (cc == TPM2_CC_CONTEXT_SAVE || cc == TPM2_CC_FLUSH_CONTEXT) {
