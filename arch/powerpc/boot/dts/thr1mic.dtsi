@@ -91,7 +91,16 @@
 			pagesize = <0x40>;
 		};
 		/* BCK, 0x56 E2PROM? */
+		cfgmem@56 {
+			compatible = "24c128";
+			reg = <0x56>;
+			pagesize = <0x40>;
+		};
 		/* FAN, 0x76 Env. sensor? */
+		bme280@76 {
+			compatible = "bosch,bme280";
+			reg = <0x76>;
+		};
 	};
 
 	spi@7000 {
