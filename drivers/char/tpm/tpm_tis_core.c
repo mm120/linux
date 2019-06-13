@@ -634,15 +634,15 @@ static irqreturn_t tis_int_handler(int dummy, void *dev_id)
 		return IRQ_NONE;
 
 	priv->irq_tested = true;
-	if (interrupt & TPM_INTF_DATA_AVAIL_INT)
+	if (interrupt & TPM_INT_DATA_AVAIL_INT)
 		wake_up_interruptible(&priv->read_queue);
-	if (interrupt & TPM_INTF_LOCALITY_CHANGE_INT)
+	if (interrupt & TPM_INT_LOCALITY_CHANGE_INT)
 		for (i = 0; i < 5; i++)
 			if (check_locality(chip, i))
 				break;
 	if (interrupt &
-	    (TPM_INTF_LOCALITY_CHANGE_INT | TPM_INTF_STS_VALID_INT |
-	     TPM_INTF_CMD_READY_INT))
+	    (TPM_INT_LOCALITY_CHANGE_INT | TPM_INT_STS_VALID_INT |
+	     TPM_INT_CMD_READY_INT))
 		wake_up_interruptible(&priv->int_queue);
 
 	/* Clear interrupts handled with TPM_EOI */
@@ -907,8 +907,8 @@ int tpm_tis_core_init(struct device *dev, struct tpm_tis_data *priv, int irq,
 	if (rc < 0)
 		goto out_err;
 
-	intmask |= TPM_INTF_CMD_READY_INT | TPM_INTF_LOCALITY_CHANGE_INT |
-		   TPM_INTF_DATA_AVAIL_INT | TPM_INTF_STS_VALID_INT;
+	intmask |= TPM_INT_CMD_READY_INT | TPM_INT_LOCALITY_CHANGE_INT |
+		   TPM_INT_DATA_AVAIL_INT | TPM_INT_STS_VALID_INT;
 	intmask &= ~TPM_GLOBAL_INT_ENABLE;
 	tpm_tis_write32(priv, TPM_INT_ENABLE(priv->locality), intmask);
 
@@ -1030,9 +1030,9 @@ static void tpm_tis_reenable_interrupts(struct tpm_chip *chip)
 	if (rc < 0)
 		goto out;
 
-	intmask |= TPM_INTF_CMD_READY_INT
-	    | TPM_INTF_LOCALITY_CHANGE_INT | TPM_INTF_DATA_AVAIL_INT
-	    | TPM_INTF_STS_VALID_INT | TPM_GLOBAL_INT_ENABLE;
+	intmask |= TPM_INT_CMD_READY_INT
+	    | TPM_INT_LOCALITY_CHANGE_INT | TPM_INT_DATA_AVAIL_INT
+	    | TPM_INT_STS_VALID_INT | TPM_GLOBAL_INT_ENABLE;
 
 	tpm_tis_write32(priv, TPM_INT_ENABLE(priv->locality), intmask);
 
