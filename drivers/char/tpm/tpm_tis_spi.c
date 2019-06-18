@@ -42,7 +42,7 @@
 struct tpm_tis_spi_phy {
 	struct tpm_tis_data priv;
 	struct spi_device *spi_device;
-	u8 *iobuf;
+	u8 body_iobuf[MAX_SPI_FRAMESIZE];
 };
 
 static inline struct tpm_tis_spi_phy *to_tpm_tis_spi_phy(struct tpm_tis_data *data)
@@ -65,14 +65,14 @@ static int tpm_tis_spi_transfer(struct tpm_tis_data *data, u32 addr, u16 len,
 	while (len) {
 		transfer_len = min_t(u16, len, MAX_SPI_FRAMESIZE);
 
-		phy->iobuf[0] = (in ? 0x80 : 0) | (transfer_len - 1);
-		phy->iobuf[1] = 0xd4;
-		phy->iobuf[2] = addr >> 8;
-		phy->iobuf[3] = addr;
+		phy->body_iobuf[0] = (in ? 0x80 : 0) | (transfer_len - 1);
+		phy->body_iobuf[1] = 0xd4;
+		phy->body_iobuf[2] = addr >> 8;
+		phy->body_iobuf[3] = addr;
 
 		memset(&spi_xfer, 0, sizeof(spi_xfer));
-		spi_xfer.tx_buf = phy->iobuf;
-		spi_xfer.rx_buf = phy->iobuf;
+		spi_xfer.tx_buf = phy->body_iobuf;
+		spi_xfer.rx_buf = phy->body_iobuf;
 		spi_xfer.len = 4;
 		spi_xfer.cs_change = 1;
 
@@ -82,9 +82,9 @@ static int tpm_tis_spi_transfer(struct tpm_tis_data *data, u32 addr, u16 len,
 		if (ret < 0)
 			goto exit;
 
-		if ((phy->iobuf[3] & 0x01) == 0) {
+		if ((phy->body_iobuf[3] & 0x01) == 0) {
 			// handle SPI wait states
-			phy->iobuf[0] = 0;
+			phy->body_iobuf[0] = 0;
 
 			for (i = 0; i < TPM_RETRY; i++) {
 				spi_xfer.len = 1;
@@ -93,7 +93,7 @@ static int tpm_tis_spi_transfer(struct tpm_tis_data *data, u32 addr, u16 len,
 				ret = spi_sync_locked(phy->spi_device, &m);
 				if (ret < 0)
 					goto exit;
-				if (phy->iobuf[0] & 0x01)
+				if (phy->body_iobuf[0] & 0x01)
 					break;
 			}
 
@@ -111,7 +111,7 @@ static int tpm_tis_spi_transfer(struct tpm_tis_data *data, u32 addr, u16 len,
 			spi_xfer.tx_buf = NULL;
 		} else if (out) {
 			spi_xfer.rx_buf = NULL;
-			memcpy(phy->iobuf, out, transfer_len);
+			memcpy(phy->body_iobuf, out, transfer_len);
 			out += transfer_len;
 		}
 
@@ -122,7 +122,7 @@ static int tpm_tis_spi_transfer(struct tpm_tis_data *data, u32 addr, u16 len,
 			goto exit;
 
 		if (in) {
-			memcpy(in, phy->iobuf, transfer_len);
+			memcpy(in, phy->body_iobuf, transfer_len);
 			in += transfer_len;
 		}
 
@@ -203,10 +203,6 @@ static int tpm_tis_spi_probe(struct spi_device *dev)
 		return -ENOMEM;
 
 	phy->spi_device = dev;
-
-	phy->iobuf = devm_kmalloc(&dev->dev, MAX_SPI_FRAMESIZE, GFP_KERNEL);
-	if (!phy->iobuf)
-		return -ENOMEM;
 
 	/* If the SPI device has an IRQ then use that */
 	if (dev->irq > 0)
