@@ -42,12 +42,73 @@
 struct tpm_tis_spi_phy {
 	struct tpm_tis_data priv;
 	struct spi_device *spi_device;
+	u8 head_iobuf_tx[4];
+	u8 head_iobuf_rx[4];
 	u8 body_iobuf[MAX_SPI_FRAMESIZE];
 };
 
 static inline struct tpm_tis_spi_phy *to_tpm_tis_spi_phy(struct tpm_tis_data *data)
 {
 	return container_of(data, struct tpm_tis_spi_phy, priv);
+}
+
+static int tpm_tis_spi_transfer_ignore_wait(struct tpm_tis_data *data,
+					    u32 addr, u16 len,
+					    u8 *in, const u8 *out)
+{
+	struct tpm_tis_spi_phy *phy = to_tpm_tis_spi_phy(data);
+	int ret = 0;
+	struct spi_message m;
+	struct spi_transfer spi_xfer_head;
+	struct spi_transfer spi_xfer_body;
+	u8 transfer_len;
+	char scratch[100];
+
+	spi_bus_lock(phy->spi_device->master);
+
+	while (len) {
+		transfer_len = min_t(u16, len, MAX_SPI_FRAMESIZE);
+
+		phy->head_iobuf_tx[0] = (in ? 0x80 : 0) | (transfer_len - 1);
+		phy->head_iobuf_tx[1] = 0xd4;
+		phy->head_iobuf_tx[2] = addr >> 8;
+		phy->head_iobuf_tx[3] = addr;
+
+		memset(&spi_xfer_head, 0, sizeof(spi_xfer_head));
+		spi_xfer_head.tx_buf = phy->head_iobuf_tx;
+		spi_xfer_head.rx_buf = phy->head_iobuf_rx;
+		spi_xfer_head.len = 4;
+
+		memset(&spi_xfer_body, 0, sizeof(spi_xfer_body));
+		spi_xfer_body.len = transfer_len;
+		spi_xfer_body.delay_usecs = 5;
+
+		if (in) {
+			spi_xfer_body.rx_buf = phy->body_iobuf;
+		} else if (out) {
+			spi_xfer_body.tx_buf = phy->body_iobuf;
+			memcpy(phy->body_iobuf, out, transfer_len);
+			out += transfer_len;
+		}
+
+		spi_message_init(&m);
+		spi_message_add_tail(&spi_xfer_head, &m);
+		spi_message_add_tail(&spi_xfer_body, &m);
+		ret = spi_sync_locked(phy->spi_device, &m);
+		if (ret < 0)
+			goto exit;
+
+		if (in) {
+			memcpy(in, phy->body_iobuf, transfer_len);
+			in += transfer_len;
+		}
+
+		len -= transfer_len;
+	}
+
+exit:
+	spi_bus_unlock(phy->spi_device->master);
+	return ret;
 }
 
 static int tpm_tis_spi_transfer(struct tpm_tis_data *data, u32 addr, u16 len,
@@ -146,6 +207,20 @@ static int tpm_tis_spi_write_bytes(struct tpm_tis_data *data, u32 addr,
 	return tpm_tis_spi_transfer(data, addr, len, NULL, value);
 }
 
+static int tpm_tis_spi_read_bytes_ignore_wait(struct tpm_tis_data *data,
+					      u32 addr,
+					      u16 len, u8 *result)
+{
+	return tpm_tis_spi_transfer_ignore_wait(data, addr, len, result, NULL);
+}
+
+static int tpm_tis_spi_write_bytes_ignore_wait(struct tpm_tis_data *data,
+					       u32 addr,
+					       u16 len, const u8 *value)
+{
+	return tpm_tis_spi_transfer_ignore_wait(data, addr, len, NULL, value);
+}
+
 static int tpm_tis_spi_read16(struct tpm_tis_data *data, u32 addr, u16 *result)
 {
 	__le16 result_le;
@@ -192,10 +267,19 @@ static const struct tpm_tis_phy_ops tpm_spi_phy_ops = {
 	.write32 = tpm_tis_spi_write32,
 };
 
+static const struct tpm_tis_phy_ops tpm_spi_phy_ops_ignore_wait = {
+	.read_bytes = tpm_tis_spi_read_bytes_ignore_wait,
+	.write_bytes = tpm_tis_spi_write_bytes_ignore_wait,
+	.read16 = tpm_tis_spi_read16,
+	.read32 = tpm_tis_spi_read32,
+	.write32 = tpm_tis_spi_write32,
+};
+
 static int tpm_tis_spi_probe(struct spi_device *dev)
 {
 	struct tpm_tis_spi_phy *phy;
 	int irq;
+	bool ignore_wait = false;
 
 	phy = devm_kzalloc(&dev->dev, sizeof(struct tpm_tis_spi_phy),
 			   GFP_KERNEL);
@@ -210,7 +294,15 @@ static int tpm_tis_spi_probe(struct spi_device *dev)
 	else
 		irq = -1;
 
-	return tpm_tis_core_init(&dev->dev, &phy->priv, irq, &tpm_spi_phy_ops,
+	if (dev->dev.of_node &&
+	    of_property_read_bool(dev->dev.of_node, "ignore-wait")) {
+		ignore_wait = true;
+	}
+
+	return tpm_tis_core_init(&dev->dev, &phy->priv, irq,
+				 ignore_wait ?
+				 &tpm_spi_phy_ops_ignore_wait :
+				 &tpm_spi_phy_ops,
 				 NULL);
 }
 

@@ -135,6 +135,7 @@
 			spi-max-frequency = <15000000>;
 			interrupt-parent = <&mpic>;
 			interrupts = <10 1 0 0>;
+			ignore-wait;
 		};
 	};
 
