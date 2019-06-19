@@ -62,7 +62,6 @@ static int tpm_tis_spi_transfer_ignore_wait(struct tpm_tis_data *data,
 	struct spi_transfer spi_xfer_head;
 	struct spi_transfer spi_xfer_body;
 	u8 transfer_len;
-	char scratch[100];
 
 	spi_bus_lock(phy->spi_device->master);
 
