@@ -123,6 +123,7 @@
 			partition@0100000 { reg = <0x0100000 0x0F00000>; label = "Rescue Linux Kernel"; };
 			partition@1000000 { reg = <0x1000000 0x0040000>; label = "Calibration File System"; };
 			partition@1040000 { reg = <0x1040000 0x04C0000>; label = "Resistant File System"; };
+			partition@1FC0000 { reg = <0x1FC0000 0x0040000>; label = "THR1MIC_CPU Modat"; };
 		};
 
 		tpm@1 {
