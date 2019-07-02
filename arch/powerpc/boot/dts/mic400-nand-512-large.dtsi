@@ -11,8 +11,14 @@
 
 &ifc_nand {
 	partition@0000000      { reg = <0x00000000 0x01000000>; label = "NAND Persistent File System"; };
-	partition@1000000      { reg = <0x01000000 0x1f000000>; label = "NAND Upgrade Section"; };
+	partition@1000000      { reg = <0x01000000 0x1F000000>; label = "NAND Upgrade Section"; };
 
-	partition@olk_01000000 { reg = <0x01000000 0x02000000>; label = "NAND P1 Read-Write File System"; };
-	partition@olk_03000000 { reg = <0x03000000 0x1d000000>; label = "NAND P1 Root File System"; };
+	/* This is the same as the 512-normal! */
+	partition@olk_01000000 { reg = <0x01000000 0x01000000>; label = "NAND P1 Boot File System"; };
+	partition@olk_02000000 { reg = <0x02000000 0x02000000>; label = "NAND P1 Read-Write File System"; };
+	partition@olk_04000000 { reg = <0x04000000 0x0c000000>; label = "NAND P1 Root File System"; };
+	partition@olk_10000000 { reg = <0x10000000 0x01000000>; label = "NAND Spare"; };
+	partition@olk_11000000 { reg = <0x11000000 0x01000000>; label = "NAND P2 Boot File System"; };
+	partition@olk_12000000 { reg = <0x12000000 0x02000000>; label = "NAND P2 Read-Write File System"; };
+	partition@olk_14000000 { reg = <0x14000000 0x0c000000>; label = "NAND P2 Root File System"; };
 };
