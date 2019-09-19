@@ -12,5 +12,5 @@
 &ifc_nand {
 	partition@00000000 { reg = <0x00000000 0x01000000>; label = "NAND Persistent File System"; };
 	partition@01000000 { reg = <0x01000000 0x0f800000>; label = "NAND P1"; };
-	partition@11000000 { reg = <0x11800000 0x0f800000>; label = "NAND P2"; };
+	partition@11000000 { reg = <0x10800000 0x0f800000>; label = "NAND P2"; };
 };
