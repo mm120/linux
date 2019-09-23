@@ -104,7 +104,6 @@
 	};
 
 	crypto@30000 {
-		status = "disabled";
 	};
 
 	/*
