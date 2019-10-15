@@ -4869,7 +4869,19 @@ check_vlan_id:
 		 * and set skb->priority like in vlan_do_receive()
 		 * For the time being, just ignore Priority Code Point
 		 */
-		__vlan_hwaccel_clear_tag(skb);
+		/**
+		 * HERE:OMICRON
+		 *
+		 * I have removed the clearing of the VLAN info at
+		 * this point.  We want to have sockets open on a
+		 * specific ethernet type, and we are interested in
+		 * the VLAN information for these packets.  (We are,
+		 * in some cases, sniffing for all packets of a
+		 * certain ethernet type, and want to know which VLANs
+		 * are active).
+		 *
+		 * __vlan_hwaccel_clear_tag(skb);
+		 */
 	}
 
 	type = skb->protocol;
