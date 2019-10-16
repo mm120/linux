@@ -12,6 +12,8 @@
 &board_soc {
 
 	i2c@3000 {
+		clock-frequency = < 400000 >;
+
 		/* ETH, PoE */
 		poe@28 {
 			compatible = "linear,ltc4266";
@@ -79,6 +81,8 @@
 	};
 
 	i2c@3100 {
+		clock-frequency = < 400000 >;
+
 		/* DSI, PoE */
 		poe@29 {
 			compatible = "linear,ltc4266";
