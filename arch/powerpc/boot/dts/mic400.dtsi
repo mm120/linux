@@ -11,6 +11,8 @@
 
 &board_soc {
 	i2c@3000 {
+		clock-frequency = < 400000 >;
+
 		poe@28 {
 			compatible = "linear,ltc4266";
 			reg = <0x28>;
@@ -23,6 +25,10 @@
 			compatible = "ics9fg104d";
 			reg = <0x6e>;
 		};
+	};
+
+	i2c@3100 {
+		clock-frequency = < 400000 >;
 	};
 
 	spi@7000 {
