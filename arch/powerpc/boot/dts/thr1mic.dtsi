@@ -12,7 +12,7 @@
 &board_soc {
 
 	i2c@3000 {
-		clock-frequency = < 400000 >;
+		clock-frequency = < 100000 >;
 
 		/* ETH, PoE */
 		poe@28 {
@@ -81,7 +81,7 @@
 	};
 
 	i2c@3100 {
-		clock-frequency = < 400000 >;
+		clock-frequency = < 100000 >;
 
 		/* DSI, PoE */
 		poe@29 {
