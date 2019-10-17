@@ -28,7 +28,7 @@
 	};
 
 	i2c@3100 {
-		clock-frequency = < 1400000 >;
+		clock-frequency = < 100000 >;
 	};
 
 	spi@7000 {
