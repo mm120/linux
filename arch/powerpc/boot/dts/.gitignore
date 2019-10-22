@@ -15,3 +15,6 @@ mic400-swt-ubi.dts
 thr1mic-boot.dts
 thr1mic-large.dts
 thr1mic-ubi.dts
+thr1mic-v1-boot.dts
+thr1mic-v1-large.dts
+thr1mic-v1-ubi.dts

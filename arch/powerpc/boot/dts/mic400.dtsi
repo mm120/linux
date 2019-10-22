@@ -174,16 +174,15 @@
 		};
 	};
 
-	mic-pwr-fail {
-		compatible = "mic-pwr-fail", "maio-pwr-fail";
-		interrupt-parent = <&mpic>;
-		interrupts = <0 0 0 0>;
-	};
+	gpio-pwr-fail-keys {
+		compatible = "gpio-keys";
 
-	mic-pwr-fail-filtered {
-		compatible = "mic-pwr-fail", "maio-pwr-fail";
-		interrupt-parent = <&mpic>;
-		interrupts = <1 0 0 0>;
+		pwr {
+			label = "GPIO Power";
+			linux,code = <256>; // BTN_0
+			interrupt-parent = <&mpic>;
+			interrupts = <1 0 0 0>;
+		};
 	};
 
 	pps-irq {

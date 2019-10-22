@@ -20,9 +20,15 @@
 			reg = <0x28>;
 		};
 		/* Only on ETH, revision 2 */
-		buttons@20 {
+		gpio_i2c: buttons@20 {
 			compatible = "nxp,pca9554";
+			gpio-controller;
+			#gpio-cells = <2>;
 			reg = <0x20>;
+			interrupt-parent = <&mpic>;
+			interrupts = <2 3 0 0>;
+			gpio-line-names = "button_boot", "button_fn",
+				"io2", "io3", "io4", "io5", "io6", "io7";
 		};
 		/* Only on ETH, revision 2 */
 		leds@25 {
@@ -104,6 +110,22 @@
 		bme280@76 {
 			compatible = "bosch,bme280";
 			reg = <0x76>;
+		};
+	};
+
+	gpio-front-keys {
+		compatible = "gpio-keys";
+
+		boot {
+			label = "GPIO Boot";
+			linux,code = <48>; // KEY_B
+			gpios = <&gpio_i2c 0 1>; // pin 0, active-low
+		};
+
+		fn {
+			label = "GPIO Fn";
+			linux,code = <33>; // KEY_F
+			gpios = <&gpio_i2c 1 1>; // pin 1, active-low
 		};
 	};
 
@@ -262,25 +284,15 @@
 	gpio: gpio-controller@fc00 {
 	};
 
-	leds {
-		compatible = "gpio-leds";
-//		LED-A {
-//			/* LED D7, on the edge of the board. */
-//			gpios = <&gpio 5 1>;
-//			default-state = "keep";
-//		};
-	};
+	gpio-pwr-fail-keys {
+		compatible = "gpio-keys";
 
-	mic-pwr-fail {
-		compatible = "mic-pwr-fail", "maio-pwr-fail";
-		interrupt-parent = <&mpic>;
-		interrupts = <0 0 0 0>;
-	};
-
-	mic-pwr-fail-filtered {
-		compatible = "mic-pwr-fail", "maio-pwr-fail";
-		interrupt-parent = <&mpic>;
-		interrupts = <1 0 0 0>;
+		pwr {
+			label = "GPIO Power";
+			linux,code = <256>; // BTN_0
+			interrupt-parent = <&mpic>;
+			interrupts = <1 0 0 0>;
+		};
 	};
 
 	pps-irq {
@@ -291,7 +303,7 @@
 		   it's low to high triggered
 		   see also Documentation/devicetree/bindings/powerpc/fsl/mpic.txt
 		*/
-		interrupts = <2 0 0 0>;
+		interrupts = <0 0 0 0>;
 	};
 };
 
