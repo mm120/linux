@@ -1,0 +1,33 @@
+/*
+ * THR1MIC Device Tree Source
+ *
+ * Copyright 2018 OMICRON electronics GmbH.
+ *
+ * This program is free software; you can redistribute	it and/or modify it
+ * under  the terms of	the GNU General	 Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
+ */
+
+/include/ "thr1mic.dts"
+
+&board_soc {
+	i2c@3000 {
+		/* Only on ETH, revision 2 */
+		gpio_i2c: buttons@20 {
+			status = "disabled";
+		};
+		/* Only on ETH, revision 2 */
+		leds@25 {
+			status = "disabled";
+		};
+	};
+
+	gpio-front-keys {
+		status = "disabled";
+	};
+
+	pps-irq {
+		interrupts = <2 0 0 0>;
+	};
+};
