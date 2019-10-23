@@ -21,3 +21,11 @@
 /include/ "mic400.dtsi"
 
 /include/ "fsl/p1010si-post.dtsi"
+
+/*
+ * Include this again so that we override the pci::interrupt-map data
+ * from fsl/p1010si-post.dtsi
+ */
+/ {
+	/include/ "mic400_32b.dtsi"
+};
