@@ -174,7 +174,18 @@
 		};
 	};
 
-	gpio-pwr-fail-keys {
+	gpio-pwr-fail-unfiltered-keys {
+		compatible = "gpio-keys";
+
+		pwr {
+			label = "GPIO Power";
+			linux,code = <256>; // BTN_0
+			interrupt-parent = <&mpic>;
+			interrupts = <0 0 0 0>;
+		};
+	};
+
+	gpio-pwr-fail-filtered-keys {
 		compatible = "gpio-keys";
 
 		pwr {
