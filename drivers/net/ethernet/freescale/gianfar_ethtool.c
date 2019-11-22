@@ -292,7 +292,7 @@ static int gfar_per_queue_gcoalesce(struct net_device *dev, u32 q_num,
 	rx_queue = priv->rx_queue[q_num];
 	tx_queue = priv->tx_queue[q_num];
 
-	if (tx_queue->txcoalescing) {
+	if (tx_queue->txic) {
 		txtime  = get_ictt_value(tx_queue->txic);
 		txcount = get_icft_value(tx_queue->txic);
 		cvals->tx_coalesce_usecs = gfar_ticks2usecs(priv, txtime);
@@ -302,7 +302,7 @@ static int gfar_per_queue_gcoalesce(struct net_device *dev, u32 q_num,
 		cvals->tx_max_coalesced_frames = 0;
 	}
 
-	if (rx_queue->rxcoalescing) {
+	if (rx_queue->rxic) {
 		rxtime  = get_ictt_value(rx_queue->rxic);
 		rxcount = get_icft_value(rx_queue->rxic);
 		cvals->rx_coalesce_usecs = gfar_ticks2usecs(priv, rxtime);
@@ -400,10 +400,9 @@ static int gfar_multi_queue_scoalesce(struct net_device *dev,
 		(cvals->rx_max_coalesced_frames == 0)) ? 0 : 1;
 
 	for_each_set_bit(i, &rx_queue_mask, priv->num_rx_queues) {
-		priv->rx_queue[i]->rxcoalescing = flag;
-		priv->rx_queue[i]->rxic = mk_ic_value(
+		priv->rx_queue[i]->rxic = flag ? mk_ic_value(
 			cvals->rx_max_coalesced_frames,
-			gfar_usecs2ticks(priv, cvals->rx_coalesce_usecs));
+			gfar_usecs2ticks(priv, cvals->rx_coalesce_usecs)) : 0;
 	}
 
 	/* Set up tx coalescing */
@@ -411,10 +410,9 @@ static int gfar_multi_queue_scoalesce(struct net_device *dev,
 		(cvals->tx_max_coalesced_frames == 0)) ? 0 : 1;
 
 	for_each_set_bit(i, &tx_queue_mask, priv->num_tx_queues) {
-		priv->tx_queue[i]->txcoalescing = flag;
-		priv->tx_queue[i]->txic = mk_ic_value(
+		priv->tx_queue[i]->txic = flag ? mk_ic_value(
 			cvals->tx_max_coalesced_frames,
-			gfar_usecs2ticks(priv, cvals->tx_coalesce_usecs));
+			gfar_usecs2ticks(priv, cvals->tx_coalesce_usecs)) : 0;
 	}
 
 	if (dev->flags & IFF_UP) {
