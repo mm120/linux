@@ -224,7 +224,7 @@
 		status = "disabled";
 	};
 
-	crypto@30000 {
+	crypto: crypto@30000 {
 	};
 
 	/*
@@ -314,5 +314,6 @@
 		ethernet0 = &enet0;
 		ethernet1 = &enet1;
 		ethernet2 = &enet2;
+		crypto = &crypto;
 	};
 };
