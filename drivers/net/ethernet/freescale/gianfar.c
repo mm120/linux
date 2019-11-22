@@ -2420,6 +2420,8 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 				(gfargrp->rx_bit_map_irq << 16));
 
 		if (likely(napi_schedule_prep(&gfargrp->napi_rx))) {
+			gfargrp->raise_rx_softirq = true;
+
 			__napi_schedule(&gfargrp->napi_rx);
 		}
 	} else {
@@ -2447,6 +2449,8 @@ static irqreturn_t gfar_receive(int irq, void *grp_id)
 
 		if (likely(napi_schedule_prep(&grp->napi_rx))) {
 			gfar_int_disable_mask(grp, IMASK_RX_DEFAULT);
+
+			grp->raise_rx_softirq = true;
 
 			__napi_schedule(&grp->napi_rx);
 		} else {
@@ -3098,6 +3102,39 @@ static void free_grp_irqs(struct gfar_priv_grp *grp)
 	free_irq(gfar_irq(grp, ER)->irq, grp);
 }
 
+static irqreturn_t gfar_receive_thread_fn(int irq, void *grp_id)
+{
+	struct gfar_priv_grp *grp = (struct gfar_priv_grp *)grp_id;
+	irqreturn_t ret;
+
+	/*
+	 * We run the non-threaded interrupt handler in a
+	 * local_bh_disable section, as that is what the old code
+	 * expected.  While we are in such a section, raising a
+	 * softirq sets a flag, but does not cause ksoftirqd to be
+	 * scheduled.  We use our own private flag raise_rx_softirq to
+	 * note that we have tried to raise a softirq, and re-raise it
+	 * outside of the local_bh_disable section - this causes
+	 * ksoftirqd to run when the interrupt handler exits.
+	 */
+	local_bh_disable();
+
+	ret = gfar_receive(irq, grp_id);
+
+	/*
+	 * Use _local_bh_disable, as we don;t want to run softirq
+	 * handlers _now_.
+	 */
+	_local_bh_enable();
+
+	if (grp->raise_rx_softirq) {
+		grp->raise_rx_softirq = false;
+		raise_softirq(NET_RX_SOFTIRQ);
+	}
+
+	return ret;
+}
+
 static int register_grp_irqs(struct gfar_priv_grp *grp)
 {
 	struct gfar_private *priv = grp->priv;
@@ -3128,8 +3165,14 @@ static int register_grp_irqs(struct gfar_priv_grp *grp)
 				  gfar_irq(grp, TX)->irq);
 			goto tx_irq_fail;
 		}
-		err = request_irq(gfar_irq(grp, RX)->irq, gfar_receive, 0,
-				  gfar_irq(grp, RX)->name, grp);
+		err = request_threaded_irq(
+			gfar_irq(grp, RX)->irq,
+			NULL,
+			gfar_receive_thread_fn,
+			/*0,*/
+			/* ((grp->rx_bit_map_irq == 0) ? 0 : IRQF_NO_SOFTIRQ_CALL) |	IRQF_ONESHOT, */
+			IRQF_ONESHOT,
+			gfar_irq(grp, RX)->name, grp);
 		if (err < 0) {
 			netif_err(priv, intr, dev, "Can't get IRQ %d\n",
 				  gfar_irq(grp, RX)->irq);
