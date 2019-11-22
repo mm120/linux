@@ -1025,6 +1025,7 @@ struct gfar_priv_grp {
 	unsigned long rx_bit_map;
 	u32 rx_bit_map_napi;
 	u32 rx_bit_map_irq;
+	bool raise_rx_softirq;
 
 	struct gfar_irqinfo *irqinfo[GFAR_NUM_IRQS];
 };
