@@ -139,6 +139,135 @@ TRACE_EVENT(gianfar_tx_no_bds,
 		  __entry->left, __entry->needed)
 );
 
+
+TRACE_EVENT(gianfar_poll_rx,
+
+	    TP_PROTO(int rstat),
+
+	    TP_ARGS(rstat),
+
+	TP_STRUCT__entry(
+		__field(	int,	rstat)
+	),
+
+	TP_fast_assign(
+		__entry->rstat = rstat;
+	),
+
+	TP_printk("rstat:%08x",
+		  __entry->rstat)
+);
+
+TRACE_EVENT(gianfar_poll_rx_budget,
+
+	    TP_PROTO(int rstat),
+
+	    TP_ARGS(rstat),
+
+	TP_STRUCT__entry(
+		__field(	int,	rstat)
+	),
+
+	TP_fast_assign(
+		__entry->rstat = rstat;
+	),
+
+	TP_printk("rstat:%08x",
+		  __entry->rstat)
+);
+
+TRACE_EVENT(gianfar_poll_rx_irq,
+
+	    TP_PROTO(int rstat, u32 msk),
+
+	    TP_ARGS(rstat, msk),
+
+	TP_STRUCT__entry(
+		__field(	int,	rstat)
+		__field(	int,	msk)
+	),
+
+	TP_fast_assign(
+		__entry->rstat = rstat;
+		__entry->msk = msk;
+	),
+
+	TP_printk("rstat:%08x  mask:%08x",
+		  __entry->rstat, __entry->msk)
+);
+
+TRACE_EVENT(gianfar_rx_packet,
+
+	    TP_PROTO(int q),
+
+	    TP_ARGS(q),
+
+	TP_STRUCT__entry(
+		__field(	int,	q)
+	),
+
+	TP_fast_assign(
+		__entry->q = q;
+	),
+
+	TP_printk("q:%d",
+		  __entry->q)
+);
+
+TRACE_EVENT(gianfar_rx_bd,
+
+	    TP_PROTO(int q),
+
+	    TP_ARGS(q),
+
+	TP_STRUCT__entry(
+		__field(	int,	q)
+	),
+
+	TP_fast_assign(
+		__entry->q = q;
+	),
+
+	TP_printk("bd:%08x",
+		  __entry->q)
+);
+
+TRACE_EVENT(gianfar_ints_rx_coal,
+
+	    TP_PROTO(u32 q),
+
+	    TP_ARGS(q),
+
+	TP_STRUCT__entry(
+		__field(	u32,	q)
+	),
+
+	TP_fast_assign(
+		__entry->q = q;
+	),
+
+	TP_printk("coal:%08x",
+		  __entry->q)
+);
+
+TRACE_EVENT(gianfar_err_irq,
+
+	    TP_PROTO(int rstat),
+
+	    TP_ARGS(rstat),
+
+	TP_STRUCT__entry(
+		__field(	int,	rstat)
+	),
+
+	TP_fast_assign(
+		__entry->rstat = rstat;
+	),
+
+	TP_printk("mask:%08x",
+		  __entry->rstat)
+);
+
 #endif /* _TRACE_GIANFAR_H_ */
 
 /* This part must be outside protection */

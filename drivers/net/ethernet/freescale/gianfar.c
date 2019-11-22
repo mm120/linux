@@ -2394,6 +2394,8 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 
 	rstat_rxf = gfar_read(&regs->rstat);
 
+	trace_gianfar_poll_rx_irq(rstat_rxf, gfar_read(&regs->ievent));
+
 	gfar_write(&regs->rstat, rstat_rxf & RSTAT_RXF_MASK);
 
 	rx_irq = gfargrp->rx_bit_map_irq & rstat_rxf;
@@ -2410,6 +2412,7 @@ static void gfar_poll_rx_irq(struct gfar_priv_grp *gfargrp)
 	}
 
 	if (rx_napi) {
+		trace_gianfar_poll_rx_irq(rx_napi | 0x2000, 0);
 
 		atomic_or(rx_napi, &gfargrp->extra_rstat);
 
@@ -2440,6 +2443,8 @@ static irqreturn_t gfar_receive(int irq, void *grp_id)
 	if (grp->rx_bit_map_irq != 0) {
 		gfar_poll_rx_irq(grp);
 	} else {
+		trace_gianfar_poll_rx_irq(gfar_read(&grp->regs->rstat), ievent);
+
 		if (likely(napi_schedule_prep(&grp->napi_rx))) {
 			gfar_int_disable_mask(grp, IMASK_RX_DEFAULT);
 
@@ -2677,6 +2682,9 @@ static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue,
 
 		bdp = &rx_queue->rx_bd_base[i];
 		lstatus = be32_to_cpu(bdp->lstatus);
+
+		trace_gianfar_rx_bd(lstatus);
+
 		if (lstatus & BD_LFLAG(RXBD_EMPTY))
 			break;
 
@@ -2730,6 +2738,8 @@ static int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue,
 		skb_record_rx_queue(skb, rx_queue->qindex);
 
 		skb->protocol = eth_type_trans(skb, ndev);
+
+		trace_gianfar_rx_packet(rx_queue->qindex);
 
 		/* Send the packet up the stack */
 		if (!is_napi) {
@@ -2829,6 +2839,8 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 
 	rstat_rxf = gfar_read(&regs->rstat);
 
+	trace_gianfar_poll_rx(rstat_rxf);
+
 	rstat_rxf &= gfargrp->rx_bit_map_napi;
 
 	gfar_write(&regs->rstat, rstat_rxf);
@@ -2848,6 +2860,8 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 			 */
 			gfar_write(&regs->rstat, gfargrp->rstat_clear_rhalt &
 					(gfargrp->rx_bit_map_napi << 16));
+
+			trace_gianfar_poll_rx_budget(rstat_rxf);
 
 			/* We must return "budget" if we want to be
 			 * called again! */
@@ -2943,6 +2957,8 @@ static irqreturn_t gfar_error(int irq, void *grp_id)
 
 	/* Save ievent for future reference */
 	u32 events = gfar_read(&regs->ievent);
+
+	trace_gianfar_err_irq(events);
 
 	/* Clear IEVENT */
 	gfar_write(&regs->ievent, events & IEVENT_ERR_MASK);
