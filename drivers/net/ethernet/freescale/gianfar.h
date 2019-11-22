@@ -919,8 +919,7 @@ struct tx_q_stats {
  *	@dirty_tx: First buffer in line to be transmitted
  *	@tx_ring_size: Tx ring size
  *	@num_txbdfree: number of free TxBds
- *	@txcoalescing: enable/disable tx coalescing
- *	@txic: transmit interrupt coalescing value
+ *	@txic: transmit interrupt coalescing value (0 = disable)
  *	@txcount: coalescing value if based on tx frame count
  *	@txtime: coalescing value if based on time
  */
@@ -941,7 +940,6 @@ struct gfar_priv_tx_q {
 	unsigned short skb_dirtytx;
 	unsigned short qindex;
 	/* Configuration info for the coalescing features */
-	unsigned int txcoalescing;
 	unsigned long txic;
 	dma_addr_t tx_bd_dma_base;
 };
@@ -970,8 +968,7 @@ struct gfar_rx_buff {
  *	@qindex: index of this queue
  *	@ndev: back pointer to net_device
  *	@rx_ring_size: Rx ring size
- *	@rxcoalescing: enable/disable rx-coalescing
- *	@rxic: receive interrupt coalescing vlaue
+ *	@rxic: receive interrupt coalescing value (0 = disable)
  */
 
 struct gfar_priv_rx_q {
@@ -988,7 +985,6 @@ struct gfar_priv_rx_q {
 	struct	sk_buff *skb;
 	struct rx_q_stats stats;
 	u32 __iomem *rfbptr;
-	unsigned char rxcoalescing;
 	unsigned long rxic;
 	dma_addr_t rx_bd_dma_base;
 };

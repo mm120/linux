@@ -259,28 +259,20 @@ static void gfar_configure_coalescing(struct gfar_private *priv,
 
 		baddr = &regs->txic0;
 		for_each_set_bit(i, &tx_mask, priv->num_tx_queues) {
-			gfar_write(baddr + i, 0);
-			if (likely(priv->tx_queue[i]->txcoalescing))
-				gfar_write(baddr + i, priv->tx_queue[i]->txic);
+			gfar_write(baddr + i, priv->tx_queue[i]->txic);
 		}
 
 		baddr = &regs->rxic0;
 		for_each_set_bit(i, &rx_mask, priv->num_rx_queues) {
-			gfar_write(baddr + i, 0);
-			if (likely(priv->rx_queue[i]->rxcoalescing))
-				gfar_write(baddr + i, priv->rx_queue[i]->rxic);
+			gfar_write(baddr + i, priv->rx_queue[i]->rxic);
 		}
 	} else {
 		/* Backward compatible case -- even if we enable
 		 * multiple queues, there's only single reg to program
 		 */
-		gfar_write(&regs->txic, 0);
-		if (likely(priv->tx_queue[0]->txcoalescing))
-			gfar_write(&regs->txic, priv->tx_queue[0]->txic);
+		gfar_write(&regs->txic, priv->tx_queue[0]->txic);
 
-		gfar_write(&regs->rxic, 0);
-		if (unlikely(priv->rx_queue[0]->rxcoalescing))
-			gfar_write(&regs->rxic, priv->rx_queue[0]->rxic);
+		gfar_write(&regs->rxic, priv->rx_queue[0]->rxic);
 	}
 }
 
@@ -2890,7 +2882,6 @@ static int gfar_poll_rx(struct napi_struct *napi, int budget)
 		}
 	}
 
-no_active_qs:
 	napi_complete_done(napi, work_done);
 
 	/* Clear the halt bit in RSTAT */
@@ -3950,14 +3941,12 @@ static int gfar_probe(struct platform_device *ofdev)
 	for (i = 0; i < priv->num_tx_queues; i++) {
 		priv->tx_queue[i]->tx_ring_size = DEFAULT_TX_RING_SIZE;
 		priv->tx_queue[i]->num_txbdfree = DEFAULT_TX_RING_SIZE;
-		priv->tx_queue[i]->txcoalescing = DEFAULT_TX_COALESCE;
-		priv->tx_queue[i]->txic = DEFAULT_TXIC;
+		priv->tx_queue[i]->txic = DEFAULT_TX_COALESCE ? DEFAULT_TXIC : 0;
 	}
 
 	for (i = 0; i < priv->num_rx_queues; i++) {
 		priv->rx_queue[i]->rx_ring_size = DEFAULT_RX_RING_SIZE;
-		priv->rx_queue[i]->rxcoalescing = DEFAULT_RX_COALESCE;
-		priv->rx_queue[i]->rxic = DEFAULT_RXIC;
+		priv->rx_queue[i]->rxic = DEFAULT_RX_COALESCE ? DEFAULT_RXIC : 0;
 	}
 
 	/* Always enable rx filer if available */
