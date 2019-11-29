@@ -23,6 +23,14 @@
 		};
 	};
 
+	spi@7000 {
+		flash@0 {
+			/delete-node/ partition@0000000;
+			partition@0000000 { reg = <0x0000000 0x00C0000>; label = "U-Boot Image"; read-only; };
+			partition@00C0000 { reg = <0x00C0000 0x0040000>; label = "U-Boot Environment"; read-only; };
+		};
+	};
+
 	gpio-front-keys {
 		status = "disabled";
 	};

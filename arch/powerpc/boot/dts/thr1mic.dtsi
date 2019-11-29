@@ -144,8 +144,7 @@
 			spi-max-frequency = <15000000>;
 
 			/* These should match the values from U-boot */
-			partition@0000000 { reg = <0x0000000 0x00C0000>; label = "U-Boot Image"; read-only; };
-			partition@00C0000 { reg = <0x00C0000 0x0040000>; label = "U-Boot Environment"; read-only; };
+			partition@0000000 { reg = <0x0000000 0x0100000>; label = "U-Boot Image"; read-only; };
 			partition@0100000 { reg = <0x0100000 0x0F00000>; label = "Rescue Linux Kernel"; };
 			partition@1000000 { reg = <0x1000000 0x0040000>; label = "Calibration File System"; };
 			partition@1040000 { reg = <0x1040000 0x04C0000>; label = "Resistant File System"; };
