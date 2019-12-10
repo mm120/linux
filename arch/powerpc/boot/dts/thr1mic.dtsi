@@ -18,6 +18,11 @@
 		poe@28 {
 			compatible = "linear,ltc4266";
 			reg = <0x28>;
+
+			poe-index = <0>;
+
+			interrupt-parent = <&mpic>;
+			interrupts = <2 1 0 0>;
 		};
 		/* Only on ETH, revision 2 */
 		gpio_i2c: buttons@20 {
@@ -26,7 +31,7 @@
 			#gpio-cells = <2>;
 			reg = <0x20>;
 			interrupt-parent = <&mpic>;
-			interrupts = <2 3 0 0>;
+			interrupts = <2 1 0 0>;
 			gpio-line-names = "button_boot", "button_fn",
 				"io2", "io3", "io4", "io5", "io6", "io7";
 		};
@@ -93,6 +98,11 @@
 		poe@29 {
 			compatible = "linear,ltc4266";
 			reg = <0x29>;
+
+			poe-index = <1>;
+
+			interrupt-parent = <&mpic>;
+			interrupts = <11 1 0 0>;
 		};
 		/* DSI, E2PROM */
 		cfgmem@50 {

@@ -13,6 +13,12 @@
 
 &board_soc {
 	i2c@3000 {
+		/* ETH, PoE */
+		poe@28 {
+			/delete-property/ poe-index;
+			/delete-property/ interrupt-parent;
+			/delete-property/ interrupts;
+		};
 		/* Only on ETH, revision 2 */
 		gpio_i2c: buttons@20 {
 			status = "disabled";
@@ -20,6 +26,15 @@
 		/* Only on ETH, revision 2 */
 		leds@25 {
 			status = "disabled";
+		};
+	};
+
+	i2c@3100 {
+		/* DSI, PoE */
+		poe@29 {
+			/delete-property/ poe-index;
+			/delete-property/ interrupt-parent;
+			/delete-property/ interrupts;
 		};
 	};
 
