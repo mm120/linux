@@ -320,9 +320,9 @@
 	aliases {
 		/delete-property/ can0;
 		/delete-property/ can1;
-		ethernet0 = &enet0;
+		ethernet0 = &enet2;
 		ethernet1 = &enet1;
-		ethernet2 = &enet2;
+		ethernet2 = &enet0;
 		crypto = &crypto;
 	};
 };
