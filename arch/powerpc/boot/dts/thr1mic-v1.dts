@@ -54,3 +54,11 @@
 		interrupts = <2 0 0 0>;
 	};
 };
+
+/ {
+	aliases {
+		ethernet0 = &enet1;
+		ethernet1 = &enet2;
+		ethernet2 = &enet0;
+	};
+};
