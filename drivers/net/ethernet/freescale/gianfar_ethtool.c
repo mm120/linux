@@ -199,11 +199,14 @@ static int gfar_sset_count(struct net_device *dev, int sset)
 static void gfar_gdrvinfo(struct net_device *dev,
 			  struct ethtool_drvinfo *drvinfo)
 {
+	struct gfar_private *priv = netdev_priv(dev);
+	struct device *ddev = &priv->ofdev->dev;
+
 	strlcpy(drvinfo->driver, DRV_NAME, sizeof(drvinfo->driver));
 	strlcpy(drvinfo->version, gfar_driver_version,
 		sizeof(drvinfo->version));
 	strlcpy(drvinfo->fw_version, "N/A", sizeof(drvinfo->fw_version));
-	strlcpy(drvinfo->bus_info, "N/A", sizeof(drvinfo->bus_info));
+	strlcpy(drvinfo->bus_info, dev_name(ddev), sizeof(drvinfo->bus_info));
 }
 
 /* Return the length of the register structure */
