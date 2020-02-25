@@ -198,15 +198,15 @@
 
 	mdio@24000 {
 		phy0: ethernet-phy@0 {
-			reg = <0x9>;
+			reg = <0xb>;
 		};
 
 		phy1: ethernet-phy@1 {
-			reg = <0x4>;
+			reg = <0xa>;
 		};
 
 		phy2: ethernet-phy@2 {
-			reg = <0x5>;
+			reg = <0x9>;
 		};
 
 		tbi0: tbi-phy@31 {
