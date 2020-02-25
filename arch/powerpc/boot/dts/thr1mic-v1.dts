@@ -53,6 +53,18 @@
 	pps-irq {
 		interrupts = <2 0 0 0>;
 	};
+
+	mdio0: mdio@24000 {
+		phy0: ethernet-phy@0 {
+			reg = <0x9>;
+		};
+		phy1: ethernet-phy@1 {
+			reg = <0x4>;
+		};
+		phy2: ethernet-phy@2 {
+			reg = <0x5>;
+		};
+	};
 };
 
 / {
