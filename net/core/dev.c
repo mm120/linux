@@ -3847,8 +3847,17 @@ int dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
 	local_bh_disable();
 
 	HARD_TX_LOCK(dev, txq, smp_processor_id());
-	if (!netif_xmit_frozen_or_drv_stopped(txq))
+	if (!netif_xmit_frozen_or_drv_stopped(txq)) {
 		ret = netdev_start_xmit(skb, dev, txq, false);
+	} else {
+		HARD_TX_UNLOCK(dev, txq);
+		spin_lock(&dev->tx_global_lock);
+		spin_unlock(&dev->tx_global_lock);
+		HARD_TX_LOCK(dev, txq, smp_processor_id());
+		if (!netif_xmit_frozen_or_drv_stopped(txq)) {
+			ret = netdev_start_xmit(skb, dev, txq, false);
+		}
+	}
 	HARD_TX_UNLOCK(dev, txq);
 
 	local_bh_enable();
