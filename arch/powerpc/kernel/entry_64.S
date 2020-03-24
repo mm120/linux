@@ -240,9 +240,7 @@ system_call_exit:
 
 	ld	r9,TI_FLAGS(r12)
 	li	r11,-MAX_ERRNO
-	lis	r0,(_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)@h
-	ori	r0,r0,(_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)@l
-	and.	r0,r9,r0
+	andi.	r0,r9,(_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)
 	bne-	.Lsyscall_exit_work
 
 	andi.	r0,r8,MSR_FP
@@ -365,25 +363,25 @@ END_FTR_SECTION_IFSET(CPU_FTR_HAS_PPR)
 	/* If TIF_RESTOREALL is set, don't scribble on either r3 or ccr.
 	 If TIF_NOERROR is set, just save r3 as it is. */
 
-	andis.	r0,r9,_TIF_RESTOREALL@h
+	andi.	r0,r9,_TIF_RESTOREALL
 	beq+	0f
 	REST_NVGPRS(r1)
 	b	2f
 0:	cmpld	r3,r11		/* r11 is -MAX_ERRNO */
 	blt+	1f
-	andis.	r0,r9,_TIF_NOERROR@h
+	andi.	r0,r9,_TIF_NOERROR
 	bne-	1f
 	ld	r5,_CCR(r1)
 	neg	r3,r3
 	oris	r5,r5,0x1000	/* Set SO bit in CR */
 	std	r5,_CCR(r1)
 1:	std	r3,GPR3(r1)
-2:	andis.	r0,r9,(_TIF_PERSYSCALL_MASK)@h
+2:	andi.	r0,r9,(_TIF_PERSYSCALL_MASK)
 	beq	4f
 
 	/* Clear per-syscall TIF flags if any are set.  */
 
-	lis	r11,(_TIF_PERSYSCALL_MASK)@h
+	li	r11,_TIF_PERSYSCALL_MASK
 	addi	r12,r12,TI_FLAGS
 3:	ldarx	r10,0,r12
 	andc	r10,r10,r11
@@ -788,7 +786,7 @@ _GLOBAL(ret_from_except_lite)
 	bl	restore_math
 	b	restore
 #endif
-1:	andi.	r0,r4,_TIF_NEED_RESCHED_MASK
+1:	andi.	r0,r4,_TIF_NEED_RESCHED
 	beq	2f
 	bl	restore_interrupts
 	SCHEDULE_USER
@@ -850,18 +848,10 @@ resume_kernel:
 
 #ifdef CONFIG_PREEMPTION
 	/* Check if we need to preempt */
-	lwz	r8,TI_PREEMPT(r9)
-	cmpwi	0,r8,0		/* if non-zero, just restore regs and return */
-	bne	restore
 	andi.	r0,r4,_TIF_NEED_RESCHED
-	bne+	check_count
-
-	andi.	r0,r4,_TIF_NEED_RESCHED_LAZY
 	beq+	restore
-	lwz	r8,TI_PREEMPT_LAZY(r9)
-
 	/* Check that preempt_count() == 0 and interrupts are enabled */
-check_count:
+	lwz	r8,TI_PREEMPT(r9)
 	cmpwi	cr0,r8,0
 	bne	restore
 	ld	r0,SOFTE(r1)

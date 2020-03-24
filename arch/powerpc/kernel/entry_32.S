@@ -401,9 +401,7 @@ ret_from_syscall:
 	MTMSRD(r10)
 	lwz	r9,TI_FLAGS(r2)
 	li	r8,-MAX_ERRNO
-	lis	r0,(_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)@h
-	ori	r0,r0, (_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)@l
-	and.	r0,r9,r0
+	andi.	r0,r9,(_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)
 	bne-	syscall_exit_work
 	cmplw	0,r3,r8
 	blt+	syscall_exit_cont
@@ -518,13 +516,13 @@ syscall_dotrace:
 	b	syscall_dotrace_cont
 
 syscall_exit_work:
-	andis.	r0,r9,_TIF_RESTOREALL@h
+	andi.	r0,r9,_TIF_RESTOREALL
 	beq+	0f
 	REST_NVGPRS(r1)
 	b	2f
 0:	cmplw	0,r3,r8
 	blt+	1f
-	andis.	r0,r9,_TIF_NOERROR@h
+	andi.	r0,r9,_TIF_NOERROR
 	bne-	1f
 	lwz	r11,_CCR(r1)			/* Load CR */
 	neg	r3,r3
@@ -533,12 +531,12 @@ syscall_exit_work:
 
 1:	stw	r6,RESULT(r1)	/* Save result */
 	stw	r3,GPR3(r1)	/* Update return value */
-2:	andi.	r0,r9,(_TIF_PERSYSCALL_MASK)@h
+2:	andi.	r0,r9,(_TIF_PERSYSCALL_MASK)
 	beq	4f
 
 	/* Clear per-syscall TIF flags if any are set.  */
 
-	li	r11,_TIF_PERSYSCALL_MASK@h
+	li	r11,_TIF_PERSYSCALL_MASK
 	addi	r12,r2,TI_FLAGS
 3:	lwarx	r8,0,r12
 	andc	r8,r8,r11
@@ -906,14 +904,7 @@ resume_kernel:
 	cmpwi	0,r0,0		/* if non-zero, just restore regs and return */
 	bne	restore_kuap
 	andi.	r8,r8,_TIF_NEED_RESCHED
-	bne+	1f
-	lwz	r0,TI_PREEMPT_LAZY(r2)
-	cmpwi	0,r0,0          /* if non-zero, just restore regs and return */
-	bne	restore_kuap
-	lwz	r0,TI_FLAGS(r2)
-	andi.	r0,r0,_TIF_NEED_RESCHED_LAZY
 	beq+	restore_kuap
-1:
 	lwz	r3,_MSR(r1)
 	andi.	r0,r3,MSR_EE	/* interrupts off? */
 	beq	restore_kuap	/* don't schedule if so */
@@ -1234,7 +1225,7 @@ global_dbcr0:
 #endif /* !(CONFIG_4xx || CONFIG_BOOKE) */
 
 do_work:			/* r10 contains MSR_KERNEL here */
-	andi.	r0,r9,_TIF_NEED_RESCHED_MASK
+	andi.	r0,r9,_TIF_NEED_RESCHED
 	beq	do_user_signal
 
 do_resched:			/* r10 contains MSR_KERNEL here */
@@ -1255,7 +1246,7 @@ recheck:
 	SYNC
 	MTMSRD(r10)		/* disable interrupts */
 	lwz	r9,TI_FLAGS(r2)
-	andi.	r0,r9,_TIF_NEED_RESCHED_MASK
+	andi.	r0,r9,_TIF_NEED_RESCHED
 	bne-	do_resched
 	andi.	r0,r9,_TIF_USER_WORK_MASK
 	beq	restore_user
