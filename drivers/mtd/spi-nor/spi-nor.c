@@ -3808,7 +3808,7 @@ spi_nor_init_non_uniform_erase_map(struct spi_nor *nor,
 		if (!(regions_erase_type & BIT(erase[i].idx)))
 			spi_nor_set_erase_type(&erase[i], 0, 0xFF);
 
-	spi_nor_region_mark_end(&region[i - 1]);
+	spi_nor_region_mark_end(&region[region_count - 1]);
 
 	return 0;
 }
