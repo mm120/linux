@@ -173,6 +173,7 @@ static struct vm_area_struct *remove_vma(struct vm_area_struct *vma)
 	struct vm_area_struct *next = vma->vm_next;
 
 	might_sleep();
+	VM_CHECK_POISON_VMA(vma);
 	if (vma->vm_ops && vma->vm_ops->close)
 		vma->vm_ops->close(vma);
 	if (vma->vm_file)
@@ -391,9 +392,13 @@ static void validate_mm(struct mm_struct *mm)
 	unsigned long highest_address = 0;
 	struct vm_area_struct *vma = mm->mmap;
 
+	VM_CHECK_POISON_MM(mm);
+
 	while (vma) {
 		struct anon_vma *anon_vma = vma->anon_vma;
 		struct anon_vma_chain *avc;
+
+		VM_CHECK_POISON_VMA(vma);
 
 		if (anon_vma) {
 			anon_vma_lock_read(anon_vma);
@@ -938,6 +943,7 @@ again:
 			anon_vma_merge(vma, next);
 		mm->map_count--;
 		mpol_put(vma_policy(next));
+		VM_CHECK_POISON_VMA(next);
 		vm_area_free(next);
 		/*
 		 * In mprotect's case 6 (see comments on vma_merge),
@@ -1867,6 +1873,7 @@ allow_write_and_free_vma:
 	if (vm_flags & VM_DENYWRITE)
 		allow_write_access(file);
 free_vma:
+	VM_CHECK_POISON_VMA(vma);
 	vm_area_free(vma);
 unacct_error:
 	if (charged)
@@ -2665,6 +2672,8 @@ int __split_vma(struct mm_struct *mm, struct vm_area_struct *vma,
 			return err;
 	}
 
+	VM_CHECK_POISON_VMA(vma);
+
 	new = vm_area_dup(vma);
 	if (!new)
 		return -ENOMEM;
@@ -2709,6 +2718,7 @@ int __split_vma(struct mm_struct *mm, struct vm_area_struct *vma,
  out_free_mpol:
 	mpol_put(vma_policy(new));
  out_free_vma:
+	VM_CHECK_POISON_VMA(new);
 	vm_area_free(new);
 	return err;
 }

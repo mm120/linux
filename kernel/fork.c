@@ -539,6 +539,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 				goto fail_nomem;
 			charge = len;
 		}
+		VM_CHECK_POISON_VMA(mpnt);
 		tmp = vm_area_dup(mpnt);
 		if (!tmp)
 			goto fail_nomem;
@@ -620,6 +621,7 @@ fail_uprobe_end:
 fail_nomem_anon_vma_fork:
 	mpol_put(vma_policy(tmp));
 fail_nomem_policy:
+	VM_CHECK_POISON_VMA(tmp);
 	vm_area_free(tmp);
 fail_nomem:
 	retval = -ENOMEM;
@@ -654,6 +656,8 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 static void check_mm(struct mm_struct *mm)
 {
 	int i;
+
+	VM_CHECK_POISON_MM(mm);
 
 	BUILD_BUG_ON_MSG(ARRAY_SIZE(resident_page_types) != NR_MM_COUNTERS,
 			 "Please make sure 'struct resident_page_types[]' is updated as well");
@@ -1089,6 +1093,11 @@ struct mm_struct *mm_alloc(void)
 		return NULL;
 
 	memset(mm, 0, sizeof(*mm));
+
+#ifdef CONFIG_DEBUG_VM_POISON
+	mm->mm_poison_start = MM_POISON_BEGIN;
+	mm->mm_poison_end = MM_POISON_END;
+#endif
 	return mm_init(mm, current, current_user_ns());
 }
 
@@ -1120,6 +1129,8 @@ void mmput(struct mm_struct *mm)
 {
 	might_sleep();
 
+	VM_CHECK_POISON_MM(mm);
+
 	if (atomic_dec_and_test(&mm->mm_users))
 		__mmput(mm);
 }
@@ -1130,12 +1141,15 @@ static void mmput_async_fn(struct work_struct *work)
 {
 	struct mm_struct *mm = container_of(work, struct mm_struct,
 					    async_put_work);
+	VM_CHECK_POISON_MM(mm);
 
 	__mmput(mm);
 }
 
 void mmput_async(struct mm_struct *mm)
 {
+	VM_CHECK_POISON_MM(mm);
+
 	if (atomic_dec_and_test(&mm->mm_users)) {
 		INIT_WORK(&mm->async_put_work, mmput_async_fn);
 		schedule_work(&mm->async_put_work);
@@ -1230,10 +1244,12 @@ struct mm_struct *get_task_mm(struct task_struct *task)
 	task_lock(task);
 	mm = task->mm;
 	if (mm) {
-		if (task->flags & PF_KTHREAD)
+		if (task->flags & PF_KTHREAD) {
 			mm = NULL;
-		else
+		} else {
 			mmget(mm);
+			VM_CHECK_POISON_MM(mm);
+		}
 	}
 	task_unlock(task);
 	return mm;
@@ -1368,6 +1384,8 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 {
 	struct mm_struct *mm;
 	int err;
+
+	VM_CHECK_POISON_MM(oldmm);
 
 	mm = allocate_mm();
 	if (!mm)

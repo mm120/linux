@@ -291,6 +291,9 @@ struct vm_userfaultfd_ctx {};
  * library, the executable area etc).
  */
 struct vm_area_struct {
+#ifdef CONFIG_DEBUG_VM_POISON
+	u32 vma_poison_start;
+#endif
 	/* The first cache line has the info for VMA tree walking. */
 
 	unsigned long vm_start;		/* Our start address within vm_mm. */
@@ -354,6 +357,9 @@ struct vm_area_struct {
 	struct mempolicy *vm_policy;	/* NUMA policy for the VMA */
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
+#ifdef CONFIG_DEBUG_VM_POISON
+	u32 vma_poison_end;
+#endif
 } __randomize_layout;
 
 struct core_thread {
@@ -369,6 +375,10 @@ struct core_state {
 
 struct kioctx_table;
 struct mm_struct {
+
+#ifdef CONFIG_DEBUG_VM_POISON
+	u32 mm_poison_start;
+#endif
 	struct {
 		struct vm_area_struct *mmap;		/* list of VMAs */
 		struct rb_root mm_rb;
@@ -530,6 +540,9 @@ struct mm_struct {
 		struct work_struct async_put_work;
 	} __randomize_layout;
 
+#ifdef CONFIG_DEBUG_VM_POISON
+	u32 mm_poison_end;
+#endif
 	/*
 	 * The mm_cpumask needs to be at the end of mm_struct, because it
 	 * is dynamically sized based on nr_cpu_ids.

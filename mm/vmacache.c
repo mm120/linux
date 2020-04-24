@@ -30,11 +30,14 @@
  */
 static inline bool vmacache_valid_mm(struct mm_struct *mm)
 {
+	VM_CHECK_POISON_MM(mm);
+
 	return current->mm == mm && !(current->flags & PF_KTHREAD);
 }
 
 void vmacache_update(unsigned long addr, struct vm_area_struct *newvma)
 {
+	VM_CHECK_POISON_VMA(newvma);
 	if (vmacache_valid_mm(newvma->vm_mm))
 		current->vmacache.vmas[VMACACHE_HASH(addr)] = newvma;
 }
@@ -77,6 +80,7 @@ struct vm_area_struct *vmacache_find(struct mm_struct *mm, unsigned long addr)
 			if (WARN_ON_ONCE(vma->vm_mm != mm))
 				break;
 #endif
+			VM_CHECK_POISON_VMA(vma);
 			if (vma->vm_start <= addr && vma->vm_end > addr) {
 				count_vm_vmacache_event(VMACACHE_FIND_HITS);
 				return vma;
@@ -105,6 +109,7 @@ struct vm_area_struct *vmacache_find_exact(struct mm_struct *mm,
 	for (i = 0; i < VMACACHE_SIZE; i++) {
 		struct vm_area_struct *vma = current->vmacache.vmas[idx];
 
+		VM_CHECK_POISON_VMA(vma);
 		if (vma && vma->vm_start == start && vma->vm_end == end) {
 			count_vm_vmacache_event(VMACACHE_FIND_HITS);
 			return vma;

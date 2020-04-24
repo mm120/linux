@@ -667,6 +667,15 @@ config DEBUG_VM_PGFLAGS
 
 	  If unsure, say N.
 
+config DEBUG_VM_POISON
+	bool "Poison VM structures"
+	depends on DEBUG_VM
+	help
+	  Add poison to the beggining and end of various VM structure to
+	  detect memory corruption in VM management code.
+
+	  If unsure, say N.
+
 config ARCH_HAS_DEBUG_VIRTUAL
 	bool
 

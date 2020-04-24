@@ -540,8 +540,10 @@ void acct_collect(long exitcode, int group_dead)
 		struct vm_area_struct *vma;
 
 		down_read(&current->mm->mmap_sem);
+		VM_CHECK_POISON_MM(current->mm);
 		vma = current->mm->mmap;
 		while (vma) {
+			VM_CHECK_POISON_VMA(vma);
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}

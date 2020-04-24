@@ -86,4 +86,12 @@
 /********** security/ **********/
 #define KEY_DESTROY		0xbd
 
+/********** include/linux/mm_types.h **********/
+#ifdef CONFIG_DEBUG_VM_POISON
+#define MM_POISON_BEGIN		0x89ABCDEF
+#define MM_POISON_END		0xFEDCBA98
+#define VMA_POISON_BEGIN	0x89ABCDFE
+#define VMA_POISON_END		0xFEDCBA89
+#endif /* DEBUG_VM_POISON */
+
 #endif

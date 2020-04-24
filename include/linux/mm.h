@@ -534,6 +534,10 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 	vma->vm_mm = mm;
 	vma->vm_ops = &dummy_vm_ops;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
+#ifdef CONFIG_DEBUG_VM_POISON
+	vma->vma_poison_start = VMA_POISON_BEGIN;
+	vma->vma_poison_end = VMA_POISON_END;
+#endif
 }
 
 static inline void vma_set_anonymous(struct vm_area_struct *vma)

@@ -51,6 +51,21 @@ void dump_mm(const struct mm_struct *mm);
 #define VM_WARN_ONCE(cond, format...) BUILD_BUG_ON_INVALID(cond)
 #define VM_WARN(cond, format...) BUILD_BUG_ON_INVALID(cond)
 #endif
+#ifdef CONFIG_DEBUG_VM_POISON
+#define VM_CHECK_POISON_MM(mm)						\
+	do {								\
+		VM_BUG_ON_MM((mm)->mm_poison_start != MM_POISON_BEGIN, (mm));\
+		VM_BUG_ON_MM((mm)->mm_poison_end != MM_POISON_END, (mm));	\
+	} while (0)
+#define VM_CHECK_POISON_VMA(vma)					\
+	do {                                                            \
+		VM_BUG_ON_VMA((vma)->vma_poison_start != VMA_POISON_BEGIN, (vma));\
+		VM_BUG_ON_VMA((vma)->vma_poison_end != VMA_POISON_END, (vma));\
+	} while (0)
+#else
+#define VM_CHECK_POISON_MM(mm) do { } while(0)
+#define VM_CHECK_POISON_VMA(mm) do { } while(0)
+#endif
 
 #ifdef CONFIG_DEBUG_VIRTUAL
 #define VIRTUAL_BUG_ON(cond) BUG_ON(cond)
