@@ -27,6 +27,10 @@
  * and size this cpu_bitmask to NR_CPUS.
  */
 struct mm_struct init_mm = {
+#ifdef CONFIG_DEBUG_VM_POISON
+	.mm_poison_start = MM_POISON_BEGIN,
+	.mm_poison_end = MM_POISON_END,
+#endif
 	.mm_rb		= RB_ROOT,
 	.pgd		= swapper_pg_dir,
 	.mm_users	= ATOMIC_INIT(2),
