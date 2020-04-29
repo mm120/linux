@@ -24,6 +24,8 @@ void use_mm(struct mm_struct *mm)
 	struct mm_struct *active_mm;
 	struct task_struct *tsk = current;
 
+	VM_CHECK_POISON_MM(mm);
+
 	task_lock(tsk);
 	active_mm = tsk->active_mm;
 	if (active_mm != mm) {

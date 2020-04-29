@@ -446,6 +446,15 @@ static int __do_page_fault(struct pt_regs *regs, unsigned long address,
 	bool must_retry = false;
 	bool kprobe_fault = kprobe_page_fault(regs, 11);
 
+	if (mm) {
+		struct vm_area_struct *vma;
+
+		VM_CHECK_POISON_MM(mm);
+		for (vma = mm->mmap; vma != NULL; vma = vma->vm_next) {
+			VM_CHECK_POISON_VMA(vma);
+		}
+	}
+
 	if (unlikely(debugger_fault_handler(regs) || kprobe_fault))
 		return 0;
 

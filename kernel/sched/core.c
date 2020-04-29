@@ -3298,6 +3298,33 @@ prepare_task_switch(struct rq *rq, struct task_struct *prev,
 	prepare_task(next);
 	prepare_arch_switch(next);
 }
+#ifdef CONFIG_DEBUG_VM_POISON
+#define VM_CHECK_POISON_MMx(mm)						\
+	do {								\
+	const struct mm_struct *_mm = (mm);				\
+	if (_mm->mm_poison_start != MM_POISON_BEGIN ||			\
+	    _mm->mm_poison_end != MM_POISON_END) {			\
+		printk(KERN_ERR "MM poison failed %08x %08x %08x",	\
+		       (unsigned)_mm,					\
+		       _mm->mm_poison_start,				\
+		       _mm->mm_poison_end);				\
+	}								\
+	} while (0)
+#define VM_CHECK_POISON_VMAx(vma)					\
+	do {                                                            \
+	const struct vm_area_struct *_vma = (vma);			\
+	if (_vma->vma_poison_start != VMA_POISON_BEGIN ||		\
+	    _vma->vma_poison_end != VMA_POISON_END) {			\
+		printk(KERN_ERR "VMA poison failed %08x %08x %08x",	\
+		       (unsigned)_vma,					\
+		       _vma->vma_poison_start,				\
+		       _vma->vma_poison_end);				\
+	}								\
+	} while (0)
+#else
+#define VM_CHECK_POISON_MMx(mm) do { } while(0)
+#define VM_CHECK_POISON_VMAx(mm) do { } while(0)
+#endif
 
 /**
  * finish_task_switch - clean up after a task-switch
@@ -3381,6 +3408,13 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	 */
 	if (mm) {
 		membarrier_mm_sync_core_before_usermode(mm);
+		{
+			struct vm_area_struct *vma;
+			VM_CHECK_POISON_MMx(mm);
+			for (vma = mm->mmap; vma != NULL; vma = vma->vm_next) {
+				VM_CHECK_POISON_VMAx(vma);
+			}
+		}
 		mmdrop_delayed(mm);
 	}
 	if (unlikely(prev_state == TASK_DEAD)) {

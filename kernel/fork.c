@@ -365,6 +365,8 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 
 void vm_area_free(struct vm_area_struct *vma)
 {
+	vma->vma_poison_start = 0x6d6d0001;
+	vma->vma_poison_end = 0x6d6d0002;
 	kmem_cache_free(vm_area_cachep, vma);
 }
 
@@ -653,11 +655,43 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 #define mm_free_pgd(mm)
 #endif /* CONFIG_MMU */
 
+#ifdef CONFIG_DEBUG_VM_POISON
+#define VM_CHECK_POISON_MMx(mm)						\
+	do {								\
+	const struct mm_struct *_mm = (mm);				\
+	if (_mm->mm_poison_start != MM_POISON_BEGIN ||			\
+	    _mm->mm_poison_end != MM_POISON_END) {			\
+		printk(KERN_ERR "MM poison failed %08x %08x %08x",	\
+		       (unsigned)_mm,					\
+		       _mm->mm_poison_start,				\
+		       _mm->mm_poison_end);				\
+	}								\
+	} while (0)
+#define VM_CHECK_POISON_VMAx(vma)					\
+	do {                                                            \
+	const struct vm_area_struct *_vma = (vma);			\
+	if (_vma->vma_poison_start != VMA_POISON_BEGIN ||		\
+	    _vma->vma_poison_end != VMA_POISON_END) {			\
+		printk(KERN_ERR "VMA poison failed %08x %08x %08x",	\
+		       (unsigned)_vma,					\
+		       _vma->vma_poison_start,				\
+		       _vma->vma_poison_end);				\
+	}								\
+	} while (0)
+#else
+#define VM_CHECK_POISON_MMx(mm) do { } while(0)
+#define VM_CHECK_POISON_VMAx(mm) do { } while(0)
+#endif
+
 static void check_mm(struct mm_struct *mm)
 {
 	int i;
+	struct vm_area_struct *vma;
 
 	VM_CHECK_POISON_MM(mm);
+	for (vma = mm->mmap; vma != NULL; vma = vma->vm_next) {
+		VM_CHECK_POISON_VMAx(vma);
+	}
 
 	BUILD_BUG_ON_MSG(ARRAY_SIZE(resident_page_types) != NR_MM_COUNTERS,
 			 "Please make sure 'struct resident_page_types[]' is updated as well");
@@ -666,8 +700,10 @@ static void check_mm(struct mm_struct *mm)
 		long x = atomic_long_read(&mm->rss_stat.count[i]);
 
 		if (unlikely(x))
-			pr_alert("BUG: Bad rss-counter state mm:%p type:%s val:%ld\n",
-				 mm, resident_page_types[i], x);
+			pr_alert("BUG: Bad rss-counter state mm:%x type:%s val:%ld [%08x %08x]\n",
+				 (unsigned)mm, resident_page_types[i], x,
+				 mm->mm_poison_start,
+				 mm->mm_poison_end);
 	}
 
 	if (mm_pgtables_bytes(mm))
@@ -692,8 +728,11 @@ void __mmdrop(struct mm_struct *mm)
 	BUG_ON(mm == &init_mm);
 	WARN_ON_ONCE(mm == current->mm);
 	WARN_ON_ONCE(mm == current->active_mm);
+	VM_CHECK_POISON_MM(mm);
 	mm_free_pgd(mm);
+	VM_CHECK_POISON_MM(mm);
 	destroy_context(mm);
+	VM_CHECK_POISON_MM(mm);
 	mmu_notifier_mm_destroy(mm);
 	check_mm(mm);
 	put_user_ns(mm->user_ns);
@@ -2764,7 +2803,12 @@ void __init proc_caches_init(void)
 			offsetof(struct mm_struct, saved_auxv),
 			sizeof_field(struct mm_struct, saved_auxv),
 			NULL);
-	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
+	vm_area_cachep =
+		kmem_cache_create(
+			"vm_area_struct", sizeof(struct vm_area_struct) + 128,
+			__alignof__(struct vm_area_struct),
+			SLAB_PANIC|SLAB_ACCOUNT|SLAB_RED_ZONE|SLAB_POISON|SLAB_CONSISTENCY_CHECKS|SLAB_STORE_USER, NULL);
+	//KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
 	mmap_init();
 	nsproxy_cache_init();
 }

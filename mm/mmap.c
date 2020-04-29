@@ -428,6 +428,17 @@ static void validate_mm(struct mm_struct *mm)
 	}
 	VM_BUG_ON_MM(bug, mm);
 }
+static void validate_mm_poison(struct mm_struct *mm)
+{
+	struct vm_area_struct *vma = mm->mmap;
+
+	VM_CHECK_POISON_MM(mm);
+
+	while (vma) {
+		VM_CHECK_POISON_VMA(vma);
+		vma = vma->vm_next;
+	}
+}
 #else
 #define validate_mm_rb(root, ignore) do { } while (0)
 #define validate_mm(mm) do { } while (0)
@@ -1724,6 +1735,9 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	struct rb_node **rb_link, *rb_parent;
 	unsigned long charged = 0;
 
+	//MM?
+	validate_mm_poison(mm);
+
 	/* Check against address space limit. */
 	if (!may_expand_vm(mm, vm_flags, len >> PAGE_SHIFT)) {
 		unsigned long nr_pages;
@@ -1746,6 +1760,9 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 			return -ENOMEM;
 	}
 
+	//MM?
+	validate_mm_poison(mm);
+
 	/*
 	 * Private writable mapping: check memory availability
 	 */
@@ -1763,6 +1780,9 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 			NULL, file, pgoff, NULL, NULL_VM_UFFD_CTX);
 	if (vma)
 		goto out;
+
+	//MM?
+	validate_mm_poison(mm);
 
 	/*
 	 * Determine the object being mapped and call the appropriate
@@ -3160,6 +3180,9 @@ void exit_mmap(struct mm_struct *mm)
 	unmap_vmas(&tlb, vma, 0, -1);
 	free_pgtables(&tlb, vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
 	tlb_finish_mmu(&tlb, 0, -1);
+
+	// MM?
+	mm->mmap = NULL;
 
 	/*
 	 * Walk the list again, actually closing and freeing it,
